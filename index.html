@@ -491,17 +491,20 @@ function dayTargets(dayType,week){
   const protein=round(w*2.2), fat=round(w*0.8);
   const bulk=(profile.goalMode||'cut')==='leanbulk';
   const uni=profile.uniformDays!==false;
-  const MAP={build:{train:1.10,rest:1.00},cut:{train:0.96,rest:0.74},peak:{train:0.95,rest:0.76}};
+  // Rent avdrag från UNDERHÅLL (m), skalar med din kropp — inget hårdkodat golv.
+  // cut: −18% i snitt (träningsdag mildare, vilodag något större); build/peak likt tidigare.
+  const MAP={build:{train:1.10,rest:1.00},cut:{train:0.86,rest:0.80},peak:{train:0.88,rest:0.82}};
   const BULK={train:1.15,rest:1.03};
   const src=bulk?BULK:MAP[ph.key];
   const td=Math.min(7,Math.max(0,(profile.trainingDays||[]).length));
   const mult=uni?((td*src.train+(7-td)*src.rest)/7):src[dayType];
   let kcal=m*mult+(profile.kcalAdjust||0);
-  const floor=uni?Math.max(bmrV,p.sex==='male'?1500:1200):(dayType==='train'?Math.max(bmrV,p.sex==='male'?1600:1300):Math.max(bmrV*0.9,p.sex==='male'?1400:1150));
-  kcal=Math.max(kcal,floor);
+  // Säkerhetsspärr: aldrig under BMR och aldrig ett absurt lågt tal — men lägg dig INTE i det normala målet.
+  const safety=Math.max(bmrV*0.95, p.sex==='male'?1300:1100);
+  const hitFloor=kcal<safety; kcal=Math.max(kcal,safety);
   let carbs=round(Math.max(30,(kcal-protein*4-fat*9)/4));
   kcal=round(protein*4+fat*9+carbs*4);
-  return {kcal,protein,fat,carbs,maint:round(m),phase:ph,floor:round(floor),uniform:uni};
+  return {kcal,protein,fat,carbs,maint:round(m),phase:ph,floor:round(safety),hitFloor,uniform:uni};
 }
 function weeklyAvgKcal(){
   const wk=weekNumber(),d=profile.days;
