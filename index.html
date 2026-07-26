@@ -290,8 +290,8 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:16px 0}
       <div class="eyebrow">Steg 2 · Vardag</div><h1 class="display" style="margin:6px 0 20px">AKTIVITET</h1>
       <p class="muted small" style="margin-bottom:16px">Utanför träningen — räkna inte med passen.</p>
       <div class="field"><div class="seg" style="flex-direction:column;gap:10px" id="su-activity">
-        <button data-v="1.2">Kontorsjobb, mest sittande</button>
-        <button data-v="1.375" class="on">Lätt aktiv — en del gång</button>
+        <button data-v="1.2">Stillasittande jobb (kontor)</button>
+        <button data-v="1.375" class="on">På fötter en del av dagen</button>
         <button data-v="1.55">På fötter en hel del</button>
         <button data-v="1.725">Mycket aktiv / fysiskt jobb</button></div></div>
     </div>
@@ -338,7 +338,7 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:16px 0}
 
 <script>
 const $=s=>document.querySelector(s);
-const APP_BUILD='b120 · 2026-07-09 · recept vs mina varor + anpassa mängder';
+const APP_BUILD='b124 · 2026-07-23 · aktivitet härleds från antal träningsdagar';
 const todayStr=(d=new Date())=>{const z=new Date(d);z.setMinutes(z.getMinutes()-z.getTimezoneOffset());return z.toISOString().slice(0,10);};
 const round=(n,p=0)=>{const f=10**p;return Math.round(n*f)/f;};
 const clamp=(n,lo,hi)=>Math.max(lo,Math.min(hi,n));
@@ -367,7 +367,14 @@ let toastT;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add
 
 /* ===== metabolism ===== */
 function bmr(p){const b=10*p.weight+6.25*p.height-5*p.age;return p.sex==='male'?b+5:b-161;}
-function maintenance(p){return bmr(p)*parseFloat(p.activity);}
+function activityFor(p){
+  // Aktivitetsnivån härleds från ANTAL TRÄNINGSDAGAR du valt (0.075 per pass, standard-interpolation
+  // från stillasittande 1.2 till mycket aktiv ~1.725). Plus ett litet tillägg för fysiskt jobb.
+  const td=Math.max(0,Math.min(7, p.trainingDays?p.trainingDays.length:(p.days||0)));
+  const jobBonus={1.2:0,1.375:0.05,1.55:0.12,1.725:0.20}[parseFloat(p.activity)]; 
+  const bonus=(jobBonus==null?0:jobBonus);
+  return Math.min(1.9, 1.2 + 0.075*td + bonus);}
+function maintenance(p){return bmr(p)*activityFor(p);}
 
 /* ===== timeline / phases ===== */
 function weeksTotal(){return profile?.weeksTotal||16;}
@@ -487,7 +494,7 @@ function dayTargets(dayType,week){
   const p=profile,ph=phaseFor(week);
   const w=targetWeight();
   const bmrV=10*w+6.25*p.height-5*p.age+(p.sex==='male'?5:-161);
-  const m=bmrV*parseFloat(p.activity);
+  const m=bmrV*activityFor(p);
   const protein=round(w*2.2), fat=round(w*0.8);
   const bulk=(profile.goalMode||'cut')==='leanbulk';
   const uni=profile.uniformDays!==false;
