@@ -338,7 +338,7 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:16px 0}
 
 <script>
 const $=s=>document.querySelector(s);
-const APP_BUILD='b131 · 2026-07-26 · 4-dagars V-form + 5-dagars armdag + schemaförklaringar';
+const APP_BUILD='b136 · 2026-07-26 · sök livsmedel i databas (utan streckkod)';
 const todayStr=(d=new Date())=>{const z=new Date(d);z.setMinutes(z.getMinutes()-z.getTimezoneOffset());return z.toISOString().slice(0,10);};
 const round=(n,p=0)=>{const f=10**p;return Math.round(n*f)/f;};
 const clamp=(n,lo,hi)=>Math.max(lo,Math.min(hi,n));
@@ -357,11 +357,14 @@ let dayTypeOverride=DB.get('dayTypeOverride',{});
 let photos=DB.get('photos',[]);
 let peakCheck=DB.get('peakCheck',{});
 let userRecipes=DB.get('recipes',[]);
+let archivedRecipes=DB.get('archivedRecipes',[]);
+let deletedBuiltins=DB.get('deletedBuiltins',[]);
+let showArchive=false;
 let products=DB.get('products',[]);
 let mealPlan=DB.get('mealPlan',null);
 function saveAll(){DB.set('profile',profile);DB.set('weights',weights);DB.set('measures',measures);
   DB.set('meals',meals);DB.set('workouts',workouts);DB.set('coachLog',coachLog);DB.set('dismissed',dismissed);
-  DB.set('dayTypeOverride',dayTypeOverride);DB.set('photos',photos);DB.set('peakCheck',peakCheck);DB.set('recipes',userRecipes);DB.set('mealPlan',mealPlan);DB.set('products',products);}
+  DB.set('dayTypeOverride',dayTypeOverride);DB.set('photos',photos);DB.set('peakCheck',peakCheck);DB.set('recipes',userRecipes);DB.set('mealPlan',mealPlan);DB.set('products',products);DB.set('archivedRecipes',archivedRecipes);DB.set('deletedBuiltins',deletedBuiltins);}
 
 let toastT;function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2200);}
 
@@ -407,7 +410,7 @@ const WAVE=[{pct:0.70,s:3,r:8,lab:'Volym'},{pct:0.725,s:3,r:7,lab:'Progression'}
 function weekInBlock(week){return ((week-1)%4)+1;}
 function blockNum(week){return Math.floor((week-1)/4);}
 const LIFT_INC={squat:5,deadlift:5,bench:2.5,press:2.5};
-function eff1RM(lift,week){return ((profile.oneRM&&profile.oneRM[lift])||0)+blockNum(week)*LIFT_INC[lift];}
+function eff1RM(lift,week){return (profile.oneRM&&profile.oneRM[lift])||0;}
 function mainPrescription(lift,week){
   const w=WAVE[weekInBlock(week)-1];
   const load=roundTo(eff1RM(lift,week)*w.pct,2.5);
@@ -783,7 +786,9 @@ const RECIPES=[
    ing:[['Argentinska räkor, råa 200g',36,2,1,161],['Vitlök, pressad 5g',0,2,0,8],['Smör (lättfett) 10g',0,0,4,36],['Mellanmjölk 1% 62g',2,3,0,20],['Färskost (50% fett) 30g',2,1,3,39],['Parmesan, riven 10g',4,0,2,34],['Vatten 6g',0,0,0,0],['Linguine, okokt 58g',7,37,1,185]],
    method:['🧂 Kryddning för 4 portioner (krydda hela satsen): 2 tsk italienska örter, 1 tsk chiliflakes, 2 tsk rökt paprika, 1 tsk salt, 1 msk persilja, ¾ tsk vitlökspulver, ¾ tsk paprika, ¾ tsk chiliflakes, ¾ tsk salt','Marinera de råa räkorna med pressad vitlök, italienska örter, chiliflakes, rökt paprika, salt, citron och olivolja. Blanda väl, ställ åt sidan.','Koka linguine (eller valfri pasta) 7–8 min tills al dente. Spara lite pastavatten till såsen, häll av.','Hetta upp en panna på medelvärme med lite smör. Stek de marinerade räkorna ~2 min per sida tills gyllene. Sänk värmen, tillsätt lite mer smör, persilja och en skvätt citron. Vänd runt, ta upp räkorna.','I samma panna på låg värme: blanda mjölk, färskost, parmesan, extra krydda och lite pastavatten. Rör tills såsen tjocknar och blir krämig.','Vänd ner den kokta pastan med en näve spenat, räkorna, mer persilja och en skvätt citron. Rör tills allt är blandat, toppa med parmesan.']}
 ];
-function allRecipes(){return RECIPES.concat(userRecipes);}
+function allRecipes(){return RECIPES.concat(userRecipes).filter(r=>!deletedBuiltins.includes(r.id));}
+function visibleRecipes(){return allRecipes().filter(r=>!archivedRecipes.includes(r.id));}
+function isArchived(id){return archivedRecipes.includes(id);}
 const PROTEINS={
   kyckling:{name:'Kycklingfilé',p:23,c:0,f:2,kcal:110,cook:'Tillaga kycklingen tills innertemp 74°C — airfryer 200°C ~12 min, eller ugn 220°C ~18–20 min.'},
   kalkon:{name:'Kalkonfilé',p:22,c:0,f:1.5,kcal:104,cook:'Tillaga kalkonen tills innertemp 74°C — airfryer 200°C ~12 min, eller ugn 220°C ~18–20 min. Ta ut den precis vid 74°C, kalkon blir lätt torr.'},
@@ -872,17 +877,17 @@ const SLOT_LBL={frukost:'Frukost',lunch:'Lunch',middag:'Middag',shake:'Shake',me
 function recipeSlot(r){return (r&&r.slot)||SLOT_BY_ID[r.id]||'lunch';}
 function defaultTrainingDays(n){return ({3:[0,2,4],4:[0,1,3,4],5:[0,1,2,3,4]})[n]||[0,1,3,4];}
 function poolFor(slot,day){
-  let p=allRecipes().filter(r=>recipeSlot(r)===slot&&r.day===day);
-  if(!p.length)p=allRecipes().filter(r=>recipeSlot(r)===slot);
+  let p=visibleRecipes().filter(r=>recipeSlot(r)===slot&&r.day===day);
+  if(!p.length)p=visibleRecipes().filter(r=>recipeSlot(r)===slot);
   return p;
 }
-function mainsPool(day){return allRecipes().filter(r=>['lunch','middag'].includes(recipeSlot(r))&&r.day===day);}
+function mainsPool(day){return visibleRecipes().filter(r=>['lunch','middag'].includes(recipeSlot(r))&&r.day===day);}
 const PLAN_V=5;
 function pickN(arr,n){const a=arr.slice(),out=[];for(let i=0;i<n&&a.length;i++){const idx=Math.min(a.length-1,Math.floor(i*a.length/n));out.push(a.splice(idx,1)[0]);}return out;}
 function prepCounts(){const c=profile.prepCounts||{mains:3,bfs:2,snacks:1};return {mains:c.mains??3,bfs:c.bfs??2,snacks:c.snacks??1};}
-function prepPools(){return {mains:allRecipes().filter(r=>['lunch','middag'].includes(recipeSlot(r))).map(r=>r.id),
-  bfs:allRecipes().filter(r=>recipeSlot(r)==='frukost').map(r=>r.id),
-  snacks:allRecipes().filter(r=>recipeSlot(r)==='mellanmal').map(r=>r.id)};}
+function prepPools(){return {mains:visibleRecipes().filter(r=>['lunch','middag'].includes(recipeSlot(r))).map(r=>r.id),
+  bfs:visibleRecipes().filter(r=>recipeSlot(r)==='frukost').map(r=>r.id),
+  snacks:visibleRecipes().filter(r=>recipeSlot(r)==='mellanmal').map(r=>r.id)};}
 function normPrep(p){p=p||{};const sn=p.snacks||(p.snack?[p.snack]:[]);return {mains:(p.mains||[]).slice(),bfs:(p.bfs||[]).slice(),snacks:sn.slice()};}
 function fillTo(arr,pool,n){arr=arr.filter(id=>pool.includes(id));for(const id of pool){if(arr.length>=n)break;if(!arr.includes(id))arr.push(id);}return arr.slice(0,n);}
 function resizePrep(){const c=prepCounts(),pool=prepPools(),p=normPrep(profile.prep);
@@ -891,7 +896,7 @@ function resizePrep(){const c=prepCounts(),pool=prepPools(),p=normPrep(profile.p
 function setPrepCount(kind,delta){const c={...prepCounts()},b={mains:[1,5],bfs:[1,3],snacks:[0,3]}[kind];
   c[kind]=Math.max(b[0],Math.min(b[1],c[kind]+delta));profile.prepCounts=c;resizePrep();profile.prepVariant=-1;genPlan();renderEat();}
 function autoPrep(){const c=prepCounts(),pool=prepPools();
-  let mp=allRecipes().filter(r=>['lunch','middag'].includes(recipeSlot(r))&&r.day==='high').map(r=>r.id);
+  let mp=visibleRecipes().filter(r=>['lunch','middag'].includes(recipeSlot(r))&&r.day==='high').map(r=>r.id);
   if(mp.length<c.mains)mp=pool.mains;
   return {mains:mp.slice(0,c.mains),bfs:pool.bfs.slice(0,c.bfs),snacks:pool.snacks.slice(0,c.snacks)};}
 const PREP_VARIANTS=[
@@ -1201,8 +1206,8 @@ function renderToday(){
   $('#twMeta').textContent=`${focusSv(s.focus)} · ${s.acc.length+(s.main?1:0)} övningar`;
   $('#twTag').textContent=s.main?`${nameSv(LIFT_NAME[s.main])} · ${WAVE[weekInBlock(wk)-1].lab}`:'Pumppass';
   let rows='';
-  if(s.main){const pr=mainPrescription(s.main,wk);
-    rows+=`<div class="ex"><span style="color:var(--gold);font-weight:700">${nameSv(LIFT_NAME[s.main])}</span><span class="r">${pr.sets}×${pr.reps} @ ${pr.load}kg</span></div>`;}
+  if(s.main){const nm=LIFT_NAME[s.main];const st=dpState(nm,[6,10],dpSeedMain(s.main));
+    rows+=`<div class="ex"><span style="color:var(--gold);font-weight:700">${nameSv(nm)}</span><span class="r">3×${st.r}${st.w?` @ ${st.w}kg`:''}</span></div>`;}
   rows+=s.acc.slice(0,3).map(e=>`<div class="ex"><span>${nameSv(e.n)}</span><span class="r">${e.s}×${e.r}</span></div>`).join('');
   const extra=s.acc.length-3;if(extra>0)rows+=`<div class="ex"><span class="muted">+${extra} till…</span><span></span></div>`;
   $('#twList').innerHTML=rows;
@@ -1311,14 +1316,34 @@ function renderTrain(){
     <button class="btn btn-gold" style="margin-top:6px" onclick="finishSession()">Avsluta passet</button>
     <button class="btn btn-ghost" style="margin-top:10px" onclick="swapSession()">Byt pass</button><div style="height:10px"></div>`;
 }
+function dpRange(name,fallback){const nums=(String(fallback||'').match(/\d+/g)||[]).map(Number);
+  if(nums.length>=2)return [nums[0],nums[1]];if(nums.length===1)return [nums[0],nums[0]+2];return [8,12];}
+function dpInc(name){return /Squat|Deadlift|Bench|Press|Row|Pull|Dip|Split|Thrust|Hack|Lunge|Hip/.test(name)?2.5:1.25;}
+function dpSeedMain(lift){const orm=(profile&&profile.oneRM&&profile.oneRM[lift])||0;return orm?roundTo(orm*0.725,2.5):null;}
+function dpState(name,range,seedW){if(!profile)return {w:seedW!=null?seedW:null,r:range[0]};profile.dp=profile.dp||{};let st=profile.dp[name];
+  if(!st)st={w:(seedW!=null?seedW:null),r:range[0]};
+  st={w:st.w,r:Math.max(range[0],Math.min(range[1],st.r||range[0]))};return st;}
+function advanceDP(){if(!activeSession||!profile)return;profile.dp=profile.dp||{};
+  activeSession.exercises.forEach(e=>{if(!e.range)return;const lo=e.range[0],hi=e.range[1];
+    const working=e.sets.filter(s=>s.done&&+s.w>0&&+s.r>0);if(!working.length)return;
+    const w=Math.max(...working.map(s=>+s.w));const atW=working.filter(s=>+s.w===w);
+    const minReps=Math.min(...atW.map(s=>+s.r));
+    if(minReps>=hi)profile.dp[e.n]={w:w+dpInc(e.n),r:lo};       // klarat toppen på alla set → +vikt, börja om
+    else profile.dp[e.n]={w,r:Math.min(hi,minReps+1)};});}      // annars: sikta en rep till på samma vikt
 function buildSession(t,wk){
   const ex=[];const subs=(profile&&profile.exSubs)||{};const bulk=(profile&&profile.goalMode)==='leanbulk';
-  if(t.main){const pr=mainPrescription(t.main,wk);const nm=LIFT_NAME[t.main];const s=subs[nm];
-    ex.push({n:s?s.n:nm,main:true,origN:s?nm:null,origTarget:`${pr.sets}×${pr.reps} @ ${pr.pct}% 1RM`,guide:!!s,target:`${pr.sets}×${pr.reps} @ ${pr.pct}% 1RM`,load:pr.load,
-      sets:Array.from({length:pr.sets}).map(()=>({w:pr.load,r:'',done:false}))});}
-  t.acc.forEach(a=>{if(!a)return;const s=subs[a.n];const n=s?s.n:a.n,r=s?s.r:a.r;const h=overloadHint(n,r);const ns=bulk?a.s+1:a.s;
-    ex.push({n,origN:s?a.n:null,origTarget:`${a.s}×${a.r}`,target:`${ns}×${r}`,heavy:!!a.heavy,tempo:s?null:(a.tempo||null),hint:h?h.text:null,
-      sets:Array.from({length:ns}).map(()=>({w:'',r:'',done:false}))});});
+  if(t.main){const nm=LIFT_NAME[t.main];const s=subs[nm];const dnm=s?s.n:nm;const range=[6,10];
+    const st=dpState(dnm,range,dpSeedMain(t.main));const sets=3;
+    ex.push({n:dnm,main:true,origN:s?nm:null,guide:!!s,dp:true,range,load:st.w||0,
+      target:`${sets}×${st.r}${st.w?` @ ${st.w}kg`:''}`,
+      hint:`Sikta på ${st.r} reps på alla ${sets} set. Klarar du ${range[1]} på alla → +vikt nästa gång, börja om på ${range[0]}.`,
+      sets:Array.from({length:sets}).map(()=>({w:st.w||'',r:'',done:false}))});}
+  t.acc.forEach(a=>{if(!a)return;const s=subs[a.n];const n=s?s.n:a.n,r=s?s.r:a.r;const ns=bulk?a.s+1:a.s;
+    const range=dpRange(n,r);const st=dpState(n,range,null);
+    ex.push({n,origN:s?a.n:null,dp:true,range,heavy:!!a.heavy,tempo:s?null:(a.tempo||null),
+      target:`${ns}×${st.r}${st.w?` @ ${st.w}kg`:''}`,
+      hint:`Sikta på ${st.r} reps${st.w?` @ ${st.w}kg`:' (fyll i din vikt)'}. Klarar du ${range[1]} på alla set → +vikt, börja om på ${range[0]}.`,
+      sets:Array.from({length:ns}).map(()=>({w:st.w||'',r:'',done:false}))});});
   return {key:t.main||t.name,name:t.name,focus:t.focus,completed:false,exercises:ex};
 }
 const CUES={
@@ -1482,6 +1507,7 @@ function exCard(e,ei){
   const cue=exGuide(e.n);const eq=eqOf(e.n);const ef=effortFor(e);
   return `<div class="ex-card ${e.main?'main':''}">
     <div class="ex-top"><span class="ex-name${(nameSv(e.n)+e.n).length>24?' ex-name-long':''}">${nameSv(e.n)}${nameSv(e.n)!==e.n?` <span class="ex-en">/ ${e.n}</span>`:''}</span><span class="chip">${e.target}</span></div>
+    ${e.hint?`<div class="ex-target" style="color:var(--gold);margin:3px 0 0">🎯 ${e.hint}</div>`:''}
     ${eq?`<div class="eq-tag">${eq}</div>`:''}
     ${e.main?`<div class="loadbig">${e.load} kg</div><div class="ex-target" style="margin-top:4px">Värm upp i 3–4 stigande set, sedan dessa arbetsset. Sista repet ska vara tungt men inte en kamp.</div>`:''}
     ${cue?`<div class="ex-cue">▸ ${cue}</div>`:''}
@@ -1532,7 +1558,7 @@ function renderRestTimer(){const el=$('#restTimer');if(!el)return;
     <div class="rt-clock">${fmtClock(rest.remaining)}</div>
     <div class="rt-btns"><button onclick="addRest(-30)">−30</button><button onclick="pauseRest()">${rest.paused?'▶':'⏸'}</button><button onclick="addRest(30)">+30</button><button onclick="skipRest()">✕</button></div></div>`;}
 function persistActive(){workouts[todayStr()]=activeSession;dayTypeOverride[todayStr()]='train';saveAll();}
-function finishSession(){activeSession.completed=true;workouts[todayStr()]=activeSession;saveAll();toast('Pass loggat 💪');activeSession=null;go('today');}
+function finishSession(){activeSession.completed=true;advanceDP();workouts[todayStr()]=activeSession;saveAll();toast('Pass loggat 💪');activeSession=null;go('today');}
 function swapSession(){const prog=SPLITS(profile.days,profile.spec);
   $('#overlay').style.display='block';
   $('#overlay').innerHTML=`<div class="sheet"><div class="sheet-inner">
@@ -1572,9 +1598,12 @@ function renderEat(){
       ${macroLine('Protein',sum.p,t.protein,'#C9A24B')}${macroLine('Kolhydrater',sum.c,t.carbs,'#6FBF73')}${macroLine('Fett',sum.f,t.fat,'#D9943F')}${macroLine('Kalorier',round(sum.k),t.kcal,'#F2EDE3')}</div>
     ${planCardHTML()}
     ${log.items.length?`<div class="card"><div class="card-h"><span class="eyebrow">Loggat idag</span><button class="link" onclick="clearDay()">Rensa</button></div>
-      ${log.items.map((it,i)=>`<div class="logged-item"><div><div style="font-weight:600">${it.name}</div><div class="tiny muted">${it.p}p · ${it.c}c · ${it.f}f · ${it.kcal} kcal${it.mult&&it.mult!==1?` · ×${it.mult}`:''}</div></div><button class="link" onclick="removeFood(${i})">Ta bort</button></div>`).join('')}</div>`:''}
+      ${log.items.map((it,i)=>`<div class="logged-item"><div style="flex:1;cursor:pointer" onclick="editFood(${i})"><div style="font-weight:600">${it.name} <span class="tiny muted">✎</span></div><div class="tiny muted">${it.p}p · ${it.c}c · ${it.f}f · ${it.kcal} kcal${it.mult&&it.mult!==1?` · ×${it.mult}`:''}</div></div><button class="link" onclick="removeFood(${i})">Ta bort</button></div>`).join('')}</div>`:''}
     <div class="card"><div class="card-h"><span class="eyebrow">Lägg till utanför planen</span><span style="display:flex;gap:16px"><button class="link" onclick="openScan()">📷 Skanna</button><button class="link" onclick="manualFood()">+ Egen</button></span></div>
-      <div style="max-height:230px;overflow-y:auto;margin:-4px -2px 0">
+      <div style="display:flex;gap:8px;margin:2px 0 8px"><input id="food-q" type="text" placeholder="🔍 Sök livsmedel (t.ex. valnötter)" style="flex:1;background:var(--raised);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--bone);font-size:14px" onkeydown="if(event.key==='Enter')searchFood()"><button class="btn btn-ghost" style="padding:0 16px" onclick="searchFood()">Sök</button></div>
+      <div id="food-res"></div>
+      <div style="max-height:300px;overflow-y:auto;margin:-4px -2px 0">
+      ${products.length?('<div class="tiny" style="color:var(--gold);font-weight:700;margin:2px 0 4px">Mina sparade varor</div>'+products.slice().sort((a,b)=>a.name.localeCompare(b.name,'sv')).map(pr=>`<div class="food-row"><div><div style="font-size:14px;font-weight:600">${esc(pr.name)} <span class="tiny muted">🏷</span></div><div class="tiny muted">${pr.p}p · ${pr.c}c · ${pr.f}f · ${pr.kcal} kcal/100g</div></div><button class="food-add" onclick="logSavedProduct('${pr.id}')">+</button></div>`).join('')+'<div class="tiny" style="color:var(--muted);font-weight:700;margin:10px 0 4px">Snabblivsmedel</div>'):''}
       ${FOODS.map((f,i)=>`<div class="food-row"><div><div style="font-size:14px;font-weight:600">${f.n}</div><div class="tiny muted">${f.p}p · ${f.c}c · ${f.f}f · ${f.k} kcal</div></div><button class="food-add" onclick="addFood(${i})">+</button></div>`).join('')}</div></div>
     <div style="height:6px"></div>`;
 }
@@ -1593,16 +1622,25 @@ function recipeCard(r){const t=recipeTotals(r);const mp=macroPct(t.p,t.c,t.f);
 function setRecipeFilter(v){recipeFilter=v;renderEat();}
 let libCat='frukost';
 function setLibCat(k){libCat=k;renderEat();}
+function toggleArchiveView(){showArchive=!showArchive;const y=window.scrollY;renderEat();window.scrollTo(0,y);}
 let libSrc='all';
 function setLibSrc(k){libSrc=k;renderEat();}
+function archiveRow(r){return `<div class="logged-item" style="align-items:center">
+    <div style="flex:1"><div style="font-weight:600;font-size:14px">${r.name}</div><div class="src-tag" style="margin:2px 0 0">${srcOf(r)}</div></div>
+    <div style="display:flex;gap:12px"><button class="link" onclick="unarchiveRecipe('${r.id}')">Återställ</button>
+    <button class="link" style="color:var(--red)" onclick="purgeRecipe('${r.id}')">Radera</button></div></div>`;}
 function libraryHTML(){
+  if(showArchive){const arch=allRecipes().filter(r=>archivedRecipes.includes(r.id));
+    return `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px"><button class="link" onclick="toggleArchiveView()">‹ Tillbaka till recept</button><span class="eyebrow">🗄 Arkiv · ${arch.length}</span></div>
+      <p class="tiny muted" style="margin-bottom:14px">Arkiverade recept visas inte i biblioteket eller nya scheman. <b>Återställ</b> tar tillbaka dem. <b>Radera</b> tar bort permanent (går inte att ångra).</p>
+      ${arch.length?arch.map(archiveRow).join(''):'<p class="tiny muted" style="text-align:center;padding:24px 0">Arkivet är tomt. Öppna ett recept och tryck 🗄 Arkivera för att lägga det här.</p>'}`;}
   const cats=[['frukost','Frukost',['frukost']],['main','Lunch & middag',['lunch','middag']],['mellanmal','Mellanmål',['mellanmal']],['shake','Shake',['shake']]];
   const cur=cats.find(c=>c[0]===libCat)?libCat:'frukost';
-  let all=allRecipes();const f=recipeFilter;
+  let all=visibleRecipes();const f=recipeFilter;
   if(f==='high')all=all.filter(r=>r.day==='high');
   else if(f==='low')all=all.filter(r=>r.day==='low');
-  else if(f==='mine')all=userRecipes;
-  const catRow=cats.map(([k,lbl,slots])=>{const n=allRecipes().filter(r=>slots.includes(recipeSlot(r))).length;
+  else if(f==='mine')all=userRecipes.filter(r=>!isArchived(r.id));
+  const catRow=cats.map(([k,lbl,slots])=>{const n=visibleRecipes().filter(r=>slots.includes(recipeSlot(r))).length;
     return `<button class="rchip ${cur===k?'on':''}" onclick="setLibCat('${k}')">${lbl} <span class="tiny muted">${n}</span></button>`;}).join('');
   const chip=(v,lbl)=>`<button class="rchip ${(recipeFilter===v||(recipeFilter==='auto'&&v==='all'))?'on':''}" onclick="setRecipeFilter('${v}')">${lbl}</button>`;
   const active=cats.find(c=>c[0]===cur);
@@ -1612,7 +1650,7 @@ function libraryHTML(){
   const srcChip=(k,lbl)=>{const n=k==='all'?list0.length:list0.filter(r=>srcKey(r)===k).length;
     return `<button class="rchip ${libSrc===k?'on':''}" onclick="setLibSrc('${k}')">${lbl} <span class="tiny muted">${n}</span></button>`;};
   const srcRow=srcDefs.filter(([k])=>k==='all'||list0.some(r=>srcKey(r)===k)).map(([k,lbl])=>srcChip(k,lbl)).join('');
-  return `<p class="tiny muted" style="margin:-4px 0 12px">Bläddra per kategori och källa. Tryck på ett recept för att läsa — därinne kan du lägga till i veckoschemat eller dagens logg.</p>
+  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:-4px 0 12px"><p class="tiny muted" style="margin:0;flex:1">Bläddra per kategori och källa. Tryck på ett recept för att läsa eller arkivera.</p><button class="rchip" onclick="toggleArchiveView()">🗄 Arkiv${archivedRecipes.length?' · '+archivedRecipes.length:''}</button></div>
     <div class="rchips" style="margin-bottom:12px">${catRow}</div>
     <div class="tiny muted" style="margin:0 0 6px">Filter</div>
     <div class="rchips" style="margin-bottom:10px">${chip('all','Alla')}${chip('high','Högkolhydrat')}${chip('low','Lågkolhydrat')}${chip('mine','Mina')}</div>
@@ -1742,7 +1780,7 @@ function chooseMeal(id){if(!mpCtx)return;const {kind,i}=mpCtx;const p=normPrep(p
   profile.prep=p;profile.prepVariant=-1;genPlan();closeOverlay();renderEat();}
 function renderMealPicker(){const {kind,i}=mpCtx;const p=normPrep(profile.prep);const curId=p[kind][i];
   const slots=kind==='mains'?['lunch','middag']:kind==='bfs'?['frukost']:['mellanmal'];
-  const all=allRecipes().filter(r=>slots.includes(recipeSlot(r)));
+  const all=visibleRecipes().filter(r=>slots.includes(recipeSlot(r)));
   const inUse=new Set(p[kind]);
   const title=kind==='mains'?'BYT HUVUDRÄTT':kind==='bfs'?'BYT FRUKOST':'BYT MELLANMÅL';
   let chips='';
@@ -1844,7 +1882,26 @@ function macroLine(l,v,t,c){const pct=clamp(t>0?v/t:0,0,1),over=v>t*1.05;
 function setDayType(t){dayTypeOverride[todayStr()]=t;saveAll();renderEat();}
 function addFood(i){const f=FOODS[i];pushFood({name:f.n,p:f.p,c:f.c,f:f.f,kcal:f.k});}
 function pushFood(it){const d=todayStr();if(!meals[d])meals[d]={items:[]};meals[d].items.push(it);saveAll();toast((it.name||'Item')+' added');renderEat();}
-function removeFood(i){meals[todayStr()].items.splice(i,1);saveAll();renderEat();}
+function removeFood(i){meals[todayStr()].items.splice(i,1);saveAll();closeOverlay();renderEat();}
+function editFood(i){const it=(meals[todayStr()]||{items:[]}).items[i];if(!it)return;$('#overlay').style.display='block';
+  $('#overlay').innerHTML=`<div class="sheet"><div class="sheet-inner">
+    <div class="sheet-bar"><button class="link" onclick="closeOverlay()">Avbryt</button><span class="small muted">Redigera post</span></div>
+    <div class="eyebrow">Loggad idag</div><h1 class="display" style="margin:4px 0 12px">REDIGERA</h1>
+    <div class="field"><label>Namn</label><input id="ef-n" type="text" value="${esc(it.name||'').replace(/"/g,'&quot;')}"></div>
+    <div class="eyebrow" style="margin:6px 0 6px">Makros för posten</div>
+    <div style="display:flex;gap:10px">
+      <div class="field" style="flex:1"><label>Protein</label><input id="ef-p" type="number" inputmode="decimal" value="${it.p}"></div>
+      <div class="field" style="flex:1"><label>Kolhydr.</label><input id="ef-c" type="number" inputmode="decimal" value="${it.c}"></div>
+      <div class="field" style="flex:1"><label>Fett</label><input id="ef-f" type="number" inputmode="decimal" value="${it.f}"></div></div>
+    <div class="field"><label>Kalorier <span class="muted">(lämna tomt = räknas ut från makros)</span></label><input id="ef-k" type="number" inputmode="decimal" value="${it.kcal}" placeholder="auto"></div>
+    <button class="btn btn-gold" style="width:100%" onclick="saveFoodEdit(${i})">Spara ändringar</button>
+    <button class="btn btn-ghost" style="width:100%;margin-top:10px;color:var(--red)" onclick="removeFood(${i})">Ta bort posten</button>
+    <div style="height:20px"></div></div></div>`;}
+function saveFoodEdit(i){const g=id=>{const el=$('#'+id);return el?el.value:'';};
+  const it=(meals[todayStr()]||{items:[]}).items[i];if(!it)return;
+  const name=(g('ef-n')||'').trim()||it.name;const p=+g('ef-p')||0,c=+g('ef-c')||0,f=+g('ef-f')||0;
+  let kcal=+g('ef-k');if(!kcal)kcal=Math.round(p*4+c*4+f*9);
+  Object.assign(it,{name,p,c,f,kcal});saveAll();closeOverlay();renderEat();toast('Posten uppdaterad ✓');}
 function clearDay(){uiConfirm('Rensa all mat som loggats idag?',()=>{meals[todayStr()]={items:[]};saveAll();renderEat();},'Rensa');}
 function manualFood(){$('#overlay').style.display='block';
   $('#overlay').innerHTML=`<div class="sheet"><div class="sheet-inner">
@@ -1864,17 +1921,28 @@ function saveManualFood(){const n=(($('#mf-n').value)||'').trim();if(!n){toast('
 let _scanInterval=null,_scanStream=null,_scanData=null,_scanTarget='log',_prodEditId=null,_prodBarcode='',_prodOrigName='';
 function esc(s){return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');}
 function saveProducts(){DB.set('products',products);}
-function parseOFF(j){
-  if(!j||j.status!==1||!j.product)return null;
-  const pr=j.product,n=pr.nutriments||{};
+function offMacros(pr){if(!pr)return null;const n=pr.nutriments||{};
   let kcal=n['energy-kcal_100g']!=null?Math.round(n['energy-kcal_100g']):(n['energy_100g']!=null?Math.round(n['energy_100g']/4.184):null);
   const p=n.proteins_100g,c=n.carbohydrates_100g,f=n.fat_100g;
   if(p==null&&c==null&&f==null&&kcal==null)return null;
   const r1=x=>x==null?0:Math.round(x*10)/10;
   if(kcal==null)kcal=Math.round((p||0)*4+(c||0)*4+(f||0)*9);
   const name=pr.product_name_sv||pr.product_name||pr.generic_name||pr.brands||'Okänd produkt';
-  return {name,per100:{kcal,p:r1(p),c:r1(c),f:r1(f)}};
-}
+  return {name,brand:pr.brands||'',per100:{kcal,p:r1(p),c:r1(c),f:r1(f)}};}
+function parseOFF(j){if(!j||j.status!==1||!j.product)return null;const m=offMacros(j.product);return m?{name:m.name,per100:m.per100}:null;}
+let _foodResults=[];
+async function searchFood(){const q=(($('#food-q')&&$('#food-q').value)||'').trim();if(!q)return;
+  const box=$('#food-res');if(box)box.innerHTML='<p class="tiny muted" style="padding:8px 2px">Söker…</p>';
+  try{const url='https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=30&fields=product_name,product_name_sv,generic_name,brands,nutriments';
+    const r=await fetch(url);const j=await r.json();
+    const seen={};_foodResults=[];
+    (j.products||[]).map(offMacros).filter(Boolean).forEach(x=>{const k=x.name.toLowerCase();if(x.per100.kcal>0&&!seen[k]){seen[k]=1;_foodResults.push(x);}});
+    renderFoodResults();
+  }catch(e){if(box)box.innerHTML='<p class="tiny muted" style="padding:8px 2px">Kunde inte söka — kräver internet. Prova streckkod eller + Egen.</p>';}}
+function renderFoodResults(){const box=$('#food-res');if(!box)return;
+  if(!_foodResults.length){box.innerHTML='<p class="tiny muted" style="padding:8px 2px">Inga träffar. Prova ett annat ord, streckkod eller + Egen.</p>';return;}
+  box.innerHTML='<div class="tiny" style="color:var(--gold);font-weight:700;margin:6px 0 4px">Sökträffar · '+_foodResults.length+'</div>'+_foodResults.slice(0,30).map((x,i)=>`<div class="food-row"><div style="flex:1;cursor:pointer" onclick="pickFoodResult(${i})"><div style="font-size:14px;font-weight:600">${esc(x.name)}</div><div class="tiny muted">${x.per100.p}p · ${x.per100.c}c · ${x.per100.f}f · ${x.per100.kcal} kcal/100g${x.brand?' · '+esc(x.brand):''}</div></div><button class="food-add" onclick="pickFoodResult(${i})">+</button></div>`).join('');}
+function pickFoodResult(i){const x=_foodResults[i];if(!x)return;_scanTarget='log';renderScanResult({name:x.name,per100:x.per100,code:''});}
 function openScan(){_scanData=null;_scanTarget='log';$('#overlay').style.display='block';
   $('#overlay').innerHTML=`<div class="sheet"><div class="sheet-inner">
     <div class="sheet-bar"><button class="link" onclick="closeScan()">Avbryt</button><span class="small muted">Open Food Facts</span></div>
@@ -1930,12 +1998,21 @@ function renderScanResult(d){_scanData=d;$('#overlay').style.display='block';
       <div class="field" style="flex:1"><label>Fett</label><input id="sc-f" type="number" inputmode="decimal" value="${d.per100.f}" oninput="updateScanTotals()"></div></div>
     <div class="field"><label>Hur mycket åt du? (gram)</label><input id="sc-g" type="number" inputmode="decimal" value="100" oninput="updateScanTotals()"></div>
     <div id="sc-tot" class="card" style="margin:4px 0 12px"></div>
+    ${d.saved?'<p class="tiny muted" style="margin:2px 0 12px">🏷 Finns i ditt varubibliotek.</p>':`<label style="display:flex;align-items:center;gap:8px;margin:2px 0 14px;font-size:13px;color:var(--muted)"><input type="checkbox" id="sc-save"> 💾 Spara i mitt varubibliotek (slipp skanna igen)</label>`}
     <button class="btn btn-gold" style="width:100%" onclick="logScanned()">Lägg till i loggen</button><div style="height:20px"></div>
   </div></div>`;updateScanTotals();}
 function scanTotals(){const p100=+(($('#sc-p')&&$('#sc-p').value)||0),c100=+(($('#sc-c')&&$('#sc-c').value)||0),f100=+(($('#sc-f')&&$('#sc-f').value)||0),g=+(($('#sc-g')&&$('#sc-g').value)||0);
   const k=g/100;return {p:round(p100*k),c:round(c100*k),f:round(f100*k),kcal:round((p100*4+c100*4+f100*9)*k)};}
 function updateScanTotals(){const t=scanTotals(),mp=macroPct(t.p,t.c,t.f),el=$('#sc-tot');if(el)el.innerHTML=`<div class="rings">${miniStat('kcal',t.kcal)}${miniStat('P',t.p,mp.p)}${miniStat('C',t.c,mp.c)}${miniStat('F',t.f,mp.f)}</div>`;}
-function logScanned(){const n=(($('#sc-n')&&$('#sc-n').value)||'').trim()||'Skannad produkt';const t=scanTotals();closeScan();pushFood({name:n,p:t.p,c:t.c,f:t.f,kcal:t.kcal});}
+function logScanned(){const n=(($('#sc-n')&&$('#sc-n').value)||'').trim()||'Skannad produkt';const t=scanTotals();
+  const save=$('#sc-save')&&$('#sc-save').checked;
+  if(save){const p100=+(($('#sc-p')&&$('#sc-p').value)||0),c100=+(($('#sc-c')&&$('#sc-c').value)||0),f100=+(($('#sc-f')&&$('#sc-f').value)||0);
+    const k100=Math.round(p100*4+c100*4+f100*9);
+    if(!products.some(x=>(x.name||'').toLowerCase()===n.toLowerCase())){
+      products.push({id:'p'+Date.now(),name:n,brand:'',barcode:(_scanData&&_scanData.code)||'',origName:'',p:p100,c:c100,f:f100,kcal:k100,added:Date.now()});
+      saveProducts();toast('"'+n+'" sparad i biblioteket ✓');}}
+  closeScan();pushFood({name:n,p:t.p,c:t.c,f:t.f,kcal:t.kcal});}
+function logSavedProduct(id){const pr=products.find(x=>x.id===id);if(!pr)return;_scanTarget='log';renderScanResult({name:pr.name,per100:{kcal:pr.kcal,p:pr.p,c:pr.c,f:pr.f},code:pr.barcode||'',saved:true});}
 
 /* ===== VARUBIBLIOTEK (skannade/inmatade varor) ===== */
 function backToProducts(){stopScan();closeOverlay();eatTab='products';if(current!=='eat')go('eat');renderEat();}
@@ -2114,7 +2191,7 @@ function renderRecipeSheet(r){const R=recipeWith(r);const t=recipeTotals(r),m=_r
   const _batches=recipeBatches(r.id),_sessPort=Math.max(1,Math.round(_cnt/_batches)),sessMode=_batches>1&&Math.abs(m-_sessPort)<0.01;
   $('#overlay').innerHTML=`<div class="sheet"><div class="sheet-inner">
     <div class="sheet-bar"><button class="link" onclick="closeOverlay()">Stäng</button>
-      ${r.id.startsWith('u')?`<button class="link" style="color:var(--red)" onclick="deleteRecipe('${r.id}')">Ta bort</button>`:'<span></span>'}</div>
+      <button class="link" style="color:var(--amber)" onclick="archiveRecipe('${r.id}')">🗄 Arkivera</button></div>
     <div class="eyebrow">${r.meal} · ${r.prep}</div>
     <h1 class="display" style="margin:4px 0 2px">${r.name}${protSuffix(r)}</h1>
     <div class="src-tag">${srcOf(r)}</div>
@@ -2192,6 +2269,13 @@ function addRecipeToDay(id){const r=findRecipe(id);if(!r)return;const t=recipeTo
   closeOverlay();go('eat');}
 function quickAddRecipe(id){const r=findRecipe(id);if(!r)return;const t=recipeTotals(r);
   pushFood({name:r.name,p:t.p,c:t.c,f:t.f,kcal:t.k,recipe:true});}
+function archiveRecipe(id){if(!archivedRecipes.includes(id))archivedRecipes.push(id);saveAll();closeOverlay();toast('Arkiverad — finns under Recept → 🗄 Arkiv');if(current==='eat')renderEat();}
+function unarchiveRecipe(id){archivedRecipes=archivedRecipes.filter(x=>x!==id);saveAll();renderEat();}
+function purgeRecipe(id){const r=findRecipe(id);uiConfirm('Radera "'+((r&&r.name)||'receptet')+'" permanent? Detta går inte att ångra.',()=>{
+  archivedRecipes=archivedRecipes.filter(x=>x!==id);
+  if(id.startsWith('u'))userRecipes=userRecipes.filter(x=>x.id!==id);
+  else if(!deletedBuiltins.includes(id))deletedBuiltins.push(id);
+  saveAll();renderEat();},'Radera permanent');}
 function deleteRecipe(id){uiConfirm('Ta bort det här receptet?',()=>{userRecipes=userRecipes.filter(r=>r.id!==id);saveAll();renderEat();},'Ta bort');}
 
 /* ===== CREATE recipe ===== */
@@ -2542,7 +2626,7 @@ function renderMe(){const wk=weekNumber();
       ${dayTargetBlock('Träningsdag','train',wk)}${dayTargetBlock('Vilodag','rest',wk)}
       <hr class="sep"><div class="small muted">Veckosnitt ≈ ${weeklyAvgKcal()} kcal/dag. Coachen justerar vilodagarnas kolhydrater när vikten svarar — protein och träningsdagarnas bränsle skyddas.</div></div>
     <div class="card"><div class="card-h"><span class="eyebrow">Lyft (uppskattat 1RM)</span><button class="link" onclick="edit1RM()">Ändra</button></div>
-      ${Object.keys(LIFT_NAME).map(l=>`<div class="logged-item"><span class="muted">${nameSv(LIFT_NAME[l])}</span><span style="font-weight:600">${profile.oneRM[l]} kg <span class="tiny muted">→ nu ${eff1RM(l,wk)}</span></span></div>`).join('')}</div>
+      ${Object.keys(LIFT_NAME).map(l=>`<div class="logged-item"><span class="muted">${nameSv(LIFT_NAME[l])}</span><span style="font-weight:600">${profile.oneRM[l]} kg <span class="tiny muted">· arbetsvikt ${(profile.dp&&profile.dp[LIFT_NAME[l]]&&profile.dp[LIFT_NAME[l]].w)||'—'} kg</span></span></div>`).join('')}</div>
     <div class="card"><div class="card-h"><span class="eyebrow">Träning</span></div>
       <div class="field"><label>Träningsprogram</label><div class="seg" id="me-days">${[3,4,5].map(n=>`<button class="${profile.days==n?'on':''}" onclick="changeDays(${n})">${n} dagar</button>`).join('')}</div>
       <div style="margin-top:10px;padding:12px 13px;background:rgba(201,162,75,.06);border:1px solid var(--border);border-radius:12px">
@@ -2677,6 +2761,7 @@ function finishSetup(){
 }
 
 function migrate(){
+  if(profile&&!profile.dp)profile.dp={};
   if(!profile)return;
   let changed=false, w=profile.weight||80;
   if(!profile.oneRM){profile.oneRM={squat:round(w*1.3),bench:round(w*0.95),deadlift:round(w*1.6),press:round(w*0.6)};changed=true;window._migrated=true;}
