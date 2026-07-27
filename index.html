@@ -338,7 +338,7 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:16px 0}
 
 <script>
 const $=s=>document.querySelector(s);
-const APP_BUILD='b124 · 2026-07-23 · aktivitet härleds från antal träningsdagar';
+const APP_BUILD='b131 · 2026-07-26 · 4-dagars V-form + 5-dagars armdag + schemaförklaringar';
 const todayStr=(d=new Date())=>{const z=new Date(d);z.setMinutes(z.getMinutes()-z.getTimezoneOffset());return z.toISOString().slice(0,10);};
 const round=(n,p=0)=>{const f=10**p;return Math.round(n*f)/f;};
 const clamp=(n,lo,hi)=>Math.max(lo,Math.min(hi,n));
@@ -461,9 +461,33 @@ function SPLITS(days,spec){
       {n:'Overhead Tricep Extension',s:3,r:'10–12'},
       {n:'Standing Calf Raise',s:3,r:'12–15'}]}
   ];
-  if(days===4) return [D.bench,D.squat,D.press,D.deadlift];
-  return [D.bench,D.squat,D.press,D.deadlift,D.detail];
+  const V4=[
+    {name:'Överkropp A · press',focus:'Bröst · rygg · axlar',main:'bench',acc:[
+      {n:'Barbell Row',s:4,r:'8–10',heavy:true},{n:'Incline DB Press',s:3,r:'8–10'},
+      {n:'DB Lateral Raise',s:4,r:'12–15'},{n:'Rope Pushdown',s:3,r:'10–12'},{n:'Hammer Curl',s:3,r:'10–12'},S]},
+    {name:'Underkropp',focus:'Ben · baksida · vad',main:'squat',acc:[
+      {n:'Romanian Deadlift',s:3,r:'8–10',heavy:true},{n:'Leg Press',s:3,r:'12'},
+      {n:'Leg Curl',s:3,r:'12'},{n:'Standing Calf Raise',s:4,r:'12–15'},{n:'Cable Crunch',s:3,r:'15'}]},
+    {name:'Överkropp B · drag',focus:'Rygg · axlar · armar',main:'press',acc:[
+      {n:'Lat Pulldown',s:4,r:'8–10'},{n:'Seated Cable Row',s:3,r:'10–12'},
+      {n:'DB Lateral Raise',s:4,r:'12–15'},{n:'Barbell Curl',s:3,r:'10–12'},{n:'Overhead Triceps Ext',s:3,r:'10–12'},S]},
+    {name:'Underkropp + bål',focus:'Baksida · rumpa · core',main:null,acc:[
+      {n:'Romanian Deadlift',s:3,r:'8–10',heavy:true},{n:'Bulgarian Split Squat',s:3,r:'10/leg'},
+      {n:'Seated Leg Curl',s:3,r:'12'},{n:'Hip Thrust',s:3,r:'10–12'},
+      {n:'Seated Calf Raise',s:4,r:'15'},{n:'Hanging Leg Raise',s:3,r:'12–15'}]}
+  ];
+  const ARMDAY={name:'Armdag',focus:'Biceps · triceps · pump',main:null,acc:[
+    {n:'Barbell Curl',s:3,r:'8–10'},{n:'Close-Grip Bench',s:3,r:'8–10'},
+    {n:'Incline DB Curl',s:3,r:'10–12'},{n:'Overhead Triceps Ext',s:3,r:'10–12'},
+    {n:'Hammer Curl',s:3,r:'12–15'},{n:'Rope Pushdown',s:3,r:'12–15'},{n:'DB Lateral Raise',s:3,r:'15'}]};
+  if(days===4) return V4;
+  return [...V4, ARMDAY];
 }
+const SCHEDULE_INFO={
+  3:['Helkropp · 3 pass/vecka','Två helkroppspass (A/B) som roterar. Varje muskel tränas ~3×/vecka — högst frekvens, färst pass. Passen är längre (~7 övningar, 75–90 min). Snällast mot återhämtningen — bäst på cut och vid återstart.'],
+  4:['V-form split · 4 pass/vecka','Överkropp A → Underkropp → Överkropp B → Underkropp+bål. Bröst/rygg/axlar 2×/vecka, RDL i stället för tung marklyft. Kortare pass (~45–55 min), mer volym per muskel. Bra balans just nu.'],
+  5:['V-form + armdag · 5 pass/vecka','4-dagarsupplägget plus en dedikerad armdag. Mest volym, biceps/triceps ~4×/vecka. Bäst för ren tillväxt i en bulk — mer krävande på återhämtningen, tuffare på cut.']
+};
 function sessionForToday(){
   if(!profile)return null;
   const prog=SPLITS(profile.days,profile.spec);
@@ -783,12 +807,12 @@ function vegSel(r){let v=(r&&r.veg&&profile&&profile.vegSubs&&profile.vegSubs[r.
 function toggleVeg(id,key){const r=findRecipe(id);if(!r||!r.veg)return;profile.vegSubs=profile.vegSubs||{};
   let arr=vegSel(r).slice();const i=arr.indexOf(key);if(i>=0)arr.splice(i,1);else arr.push(key);
   if(!arr.length)delete profile.vegSubs[id];else profile.vegSubs[id]=arr;saveAll();
-  try{if(current==='eat')renderEat();}catch(e){}const rr=window._openR;if(rr)renderRecipeSheet(rr);}
+  try{if(current==='eat')renderEat();}catch(e){}const rr=window._openR;if(rr)keepScroll(()=>renderRecipeSheet(rr));}
 function sauceSub(r){return (r&&r.sauce&&profile&&profile.sauceSubs&&profile.sauceSubs[r.id])||null;}
 function setSauceSub(id,key){const r=findRecipe(id);if(!r||!r.sauce)return;profile.sauceSubs=profile.sauceSubs||{};
   if(key==='none')delete profile.sauceSubs[id];else profile.sauceSubs[id]=key;saveAll();
   try{if(current==='eat')renderEat();}catch(e){}
-  const rr=window._openR;if(rr)renderRecipeSheet(rr);}
+  const rr=window._openR;if(rr)keepScroll(()=>renderRecipeSheet(rr));}
 function recipeWith(r,skipProducts){if(!r)return r;let ing=r.ing,changed=false;
   if(r.prot){const key=protSub(r);if(key&&key!==r.prot.base){const P=PROTEINS[key];if(P){ing=ing.map(x=>x.slice());changed=true;const g=r.prot.g;
     ing[r.prot.i]=[`${P.name} ${g}g`,Math.round(g*P.p/100),Math.round(g*P.c/100),Math.round(g*P.f/100),Math.round(g*P.kcal/100)];}}}
@@ -808,7 +832,7 @@ function protSuffix(r){const k=protSub(r);return (k&&r.prot&&k!==r.prot.base)?` 
 function setProtSub(id,key){const r=findRecipe(id);if(!r||!r.prot)return;profile.protSubs=profile.protSubs||{};
   if(key===r.prot.base)delete profile.protSubs[id];else profile.protSubs[id]=key;saveAll();
   try{if(current==='eat')renderEat();}catch(e){}
-  const rr=window._openR;if(rr)renderRecipeSheet(rr);}
+  const rr=window._openR;if(rr)keepScroll(()=>renderRecipeSheet(rr));}
 function recipeTotals(r){r=recipeWith(r);return r.ing.reduce((a,i)=>({p:a.p+i[1],c:a.c+i[2],f:a.f+i[3],k:a.k+i[4]}),{p:0,c:0,f:0,k:0});}
 function recipeOrigTotals(r){const R=recipeWith(r,true);return R.ing.reduce((a,i)=>({p:a.p+i[1],c:a.c+i[2],f:a.f+i[3],k:a.k+i[4]}),{p:0,c:0,f:0,k:0});}
 function recipeMatchedCount(r){if(!products||!products.length||!r||!r.id)return 0;let n=0;const R=recipeWith(r,true);
@@ -820,8 +844,8 @@ function adaptRecipeToProducts(id){const r=findRecipe(id);if(!r)return;const R=r
     const per100=dom==='p'?pr.p:dom==='c'?pr.c:pr.f;const orig=dom==='p'?op:dom==='c'?oc:of;
     if(per100>0&&orig>0)adapt[base]=Math.max(1,Math.round(orig*100/per100));});
   profile.recipeAdapt=profile.recipeAdapt||{};profile.recipeAdapt[id]=adapt;saveAll();
-  toast('Mängderna anpassade efter dina varor ✓');const rr=window._openR||r;renderRecipeSheet(rr);}
-function resetRecipeAdapt(id){if(profile.recipeAdapt)delete profile.recipeAdapt[id];saveAll();toast('Återställt till receptets mängder');const rr=window._openR||findRecipe(id);renderRecipeSheet(rr);}
+  toast('Mängderna anpassade efter dina varor ✓');const rr=window._openR||r;keepScroll(()=>renderRecipeSheet(rr));}
+function resetRecipeAdapt(id){if(profile.recipeAdapt)delete profile.recipeAdapt[id];saveAll();toast('Återställt till receptets mängder');const rr=window._openR||findRecipe(id);keepScroll(()=>renderRecipeSheet(rr));}
 function recipeIsAdapted(id){return !!(profile.recipeAdapt&&profile.recipeAdapt[id]&&Object.keys(profile.recipeAdapt[id]).length);}
 function productCompareSection(r){if(recipeMatchedCount(r)===0)return '';
   const o=recipeOrigTotals(r),v=recipeTotals(r);
@@ -1028,11 +1052,34 @@ function swapMeal(d,mi){const day=(profile.trainingDays||[]).includes(d)?'high':
     const ci=pool.findIndex(r=>r.id===m.id);m.id=pool[(ci+1)%pool.length].id;
   }
   saveAll();renderEat();}
+function slotLbl(s){return ({frukost:'Frukost',lunch:'Lunch',middag:'Middag',mellanmal:'Mellanmål',shake:'Shake'})[s]||s;}
+function todayPlanIdx(){ensurePlan();const idx=(new Date().getDay()+6)%7;return mealPlan.length?idx%mealPlan.length:0;}
+function planMealMacros(m,d){const r=findRecipe(m.id);if(!r)return null;const t=recipeTotals(r);const sc=mealScaleFor(m,d);return {name:r.name,sc,p:round(t.p*sc),c:round(t.c*sc),f:round(t.f*sc),kcal:round(t.k*sc)};}
+function planMealKey(slot,id){return 'plan:'+slot+':'+id;}
+function isPlanMealLogged(slot,id){const log=meals[todayStr()]||{items:[]};const k=planMealKey(slot,id);return log.items.some(it=>it.planKey===k);}
+function togglePlanMeal(slot,id){const d=todayPlanIdx(),day=todayStr();if(!meals[day])meals[day]={items:[]};const items=meals[day].items;const k=planMealKey(slot,id);
+  const ex=items.findIndex(it=>it.planKey===k);
+  if(ex>=0)items.splice(ex,1);
+  else{const mac=planMealMacros({slot,id},d);if(mac)items.push({name:mac.name,p:mac.p,c:mac.c,f:mac.f,kcal:mac.kcal,recipe:true,planKey:k});}
+  saveAll();const y=window.scrollY;renderEat();window.scrollTo(0,y);}
+function logAllPlanToday(){const ti=todayPlanIdx(),day=todayStr();if(!meals[day])meals[day]={items:[]};
+  (mealPlan[ti]||[]).forEach(m=>{if(!isPlanMealLogged(m.slot,m.id)){const mac=planMealMacros(m,ti);if(mac)meals[day].items.push({name:mac.name,p:mac.p,c:mac.c,f:mac.f,kcal:mac.kcal,recipe:true,planKey:planMealKey(m.slot,m.id)});}});
+  saveAll();const y=window.scrollY;renderEat();window.scrollTo(0,y);}
+function planCardHTML(){if((profile.planMode||'prep')==='varied')return '';ensurePlan();const ti=todayPlanIdx();const tm=mealPlan[ti]||[];if(!tm.length)return '';
+  const allOn=tm.every(m=>isPlanMealLogged(m.slot,m.id));
+  return `<div class="card"><div class="card-h"><span class="eyebrow">🍱 Dagens plan · ${WD[ti]}</span>${allOn?'<span class="tiny" style="color:var(--green);font-weight:700">Allt ätet ✓</span>':`<button class="link" onclick="logAllPlanToday()">Bocka i alla</button>`}</div>
+    <p class="tiny muted" style="margin:-2px 0 8px">Bocka i det du ätit — det räknas i dagens summa ovan. Skanna eller lägg till egen mat nedan för sånt utanför planen.</p>
+    ${tm.map(m=>{const mac=planMealMacros(m,ti);if(!mac)return '';const on=isPlanMealLogged(m.slot,m.id);
+      return `<div class="logged-item" style="cursor:pointer;align-items:center" onclick="togglePlanMeal('${m.slot}','${m.id}')">
+        <div style="display:flex;align-items:center;gap:11px;flex:1">
+          <span style="width:22px;height:22px;border-radius:6px;border:1.5px solid ${on?'var(--gold)':'var(--border)'};background:${on?'var(--gold)':'transparent'};color:#141210;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex:none">${on?'✓':''}</span>
+          <div><div style="font-weight:600${on?';color:var(--muted);text-decoration:line-through':''}">${slotLbl(m.slot)} · ${mac.name}</div>
+          <div class="tiny muted">${mac.kcal} kcal · ${mac.p}p · ${mac.c}c · ${mac.f}f</div></div></div></div>`;}).join('')}</div>`;}
 function logPlanDay(d){const items=[];
   mealPlan[d].forEach(m=>{const r=findRecipe(m.id);if(r){const t=recipeTotals(r);const sc=mealScaleFor(m,d);
     items.push({name:r.name+(Math.abs(sc-1)>0.05?` (${sc.toFixed(2).replace('.',',')}×)`:''),p:round(t.p*sc),c:round(t.c*sc),f:round(t.f*sc),kcal:round(t.k*sc),recipe:true});}});
   const day=todayStr();if(!meals[day])meals[day]={items:[]};meals[day].items.push(...items);saveAll();
-  toast('Hela dagen tillagd i loggen');eatTab='today';renderEat();}
+  toast('Hela dagen tillagd i loggen');eatMode='log';renderEat();}
 function toggleTrainingDay(d){let td=(profile.trainingDays||[]).slice();
   if(td.includes(d))td=td.filter(x=>x!==d);else td.push(d);
   profile.trainingDays=td.sort((a,b)=>a-b);genPlan();renderEat();}
@@ -1120,6 +1167,7 @@ let current='today';
 function go(v){current=v;['today','train','eat','progress','me'].forEach(x=>$('#view-'+x).classList.toggle('hidden',x!==v));
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.toggle('active',b.dataset.v===v));
   window.scrollTo(0,0);render();}
+function keepScroll(fn){const ov=$('#overlay');const sh=ov.querySelector('.sheet');const st=sh?sh.scrollTop:0;fn();const ns=ov.querySelector('.sheet');if(ns)ns.scrollTop=st;}
 function render(){if(!profile)return;
   if(current==='today')renderToday();if(current==='train')renderTrain();
   if(current==='eat')renderEat();if(current==='progress')renderProgress();if(current==='me')renderMe();}
@@ -1499,40 +1547,41 @@ function pickSession(i){const prog=SPLITS(profile.days,profile.spec);activeSessi
 
 /* ===== EAT ===== */
 let recipeFilter='auto'; // auto | high | low | mine | all
-let eatTab='today'; // today | plan
-function setEatTab(t){eatTab=t;renderEat();}
+let eatTab='plan'; // plan | library | products  (Planera-underflikar)
+let eatMode='log'; // log | plan
+function setEatMode(m){eatMode=m;if(m==='plan'&&!['plan','library','products'].includes(eatTab))eatTab='plan';const y=window.scrollY;renderEat();window.scrollTo(0,y);}
+function setEatTab(t){eatTab=t;const y=window.scrollY;renderEat();window.scrollTo(0,y);}
 function renderEat(){
   $('#eatDate').textContent=new Date().toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short'}).toUpperCase();
-  const tabs=`<div class="toggle2" style="margin-bottom:14px;font-size:13px"><button class="${eatTab==='today'?'on':''}" onclick="setEatTab('today')">Idag</button><button class="${eatTab==='plan'?'on':''}" onclick="setEatTab('plan')">Schema</button><button class="${eatTab==='library'?'on':''}" onclick="setEatTab('library')">Recept</button><button class="${eatTab==='products'?'on':''}" onclick="setEatTab('products')">Varor</button></div>`;
-  if(eatTab==='plan'){$('#eatBody').innerHTML=tabs+planHTML();return;}
-  if(eatTab==='library'){$('#eatBody').innerHTML=tabs+libraryHTML();return;}
-  if(eatTab==='products'){$('#eatBody').innerHTML=tabs+productsHTML();return;}
+  const modeToggle=`<div class="toggle2" style="margin-bottom:14px"><button class="${eatMode==='log'?'on':''}" onclick="setEatMode('log')">📋 Logga</button><button class="${eatMode==='plan'?'on':''}" onclick="setEatMode('plan')">🗓 Planera</button></div>`;
   const wk=weekNumber(),train=isTrainingToday(),t=dayTargets(train?'train':'rest',wk);
   const log=meals[todayStr()]||{items:[]};
   const sum=log.items.reduce((a,i)=>({p:a.p+i.p,c:a.c+i.c,f:a.f+i.f,k:a.k+i.kcal}),{p:0,c:0,f:0,k:0});
-  const effFilter=recipeFilter==='auto'?carbDayToday():recipeFilter;
-  let list=allRecipes();
-  if(effFilter==='high')list=list.filter(r=>r.day==='high');
-  else if(effFilter==='low')list=list.filter(r=>r.day==='low');
-  else if(effFilter==='mine')list=userRecipes;
-  const chip=(v,lbl)=>`<button class="rchip ${recipeFilter===v?'on':''}" onclick="setRecipeFilter('${v}')">${lbl}</button>`;
-  $('#eatBody').innerHTML=tabs+`
-    <div class="card"><div class="card-h"><span class="eyebrow">Dagtyp — kolhydratcykling</span><span class="chip ${train?'':'blue'}">${t.phase.name}</span></div>
-      <div class="toggle2"><button class="${train?'on':''}" onclick="setDayType('train')">Träningsdag</button><button class="${!train?'on':''}" onclick="setDayType('rest')">Vilodag</button></div>
-      <p class="tiny muted" style="margin-top:10px">${train?'Högkolhydratdag — kolhydrater runt passet. Recepten nedan är filtrerade för att matcha.':'Lågkolhydratdag — kolhydraterna dras ner, proteinet hålls. Visar lågkolhydratrecept.'}</p></div>
-    <div class="card"><div class="card-h"><span class="eyebrow">Dagens mål</span><span class="small muted">snitt ≈ ${weeklyAvgKcal()} kcal/dag</span></div>
-      ${macroLine('Protein',sum.p,t.protein,'#C9A24B')}${macroLine('Kolhydrater',sum.c,t.carbs,'#6FBF73')}${macroLine('Fett',sum.f,t.fat,'#D9943F')}${macroLine('Kalorier',round(sum.k),t.kcal,'#F2EDE3')}<div class="tiny" style="color:var(--gold);margin-top:2px">Mål-fördelning: ${macroPct(t.protein,t.carbs,t.fat).p}% protein · ${macroPct(t.protein,t.carbs,t.fat).c}% kolhydrater · ${macroPct(t.protein,t.carbs,t.fat).f}% fett</div></div>
+  if(eatMode==='plan'){
+    if(!['plan','library','products'].includes(eatTab))eatTab='plan';
+    const sub=`<div class="toggle2" style="margin-bottom:14px;font-size:13px"><button class="${eatTab==='plan'?'on':''}" onclick="setEatTab('plan')">Schema</button><button class="${eatTab==='library'?'on':''}" onclick="setEatTab('library')">Recept</button><button class="${eatTab==='products'?'on':''}" onclick="setEatTab('products')">Varor</button></div>`;
+    let inner;
+    if(eatTab==='library')inner=libraryHTML();
+    else if(eatTab==='products')inner=productsHTML();
+    else inner=dayTypeCard(train,t)+planHTML();
+    $('#eatBody').innerHTML=modeToggle+sub+inner;return;
+  }
+  // ===== LOGGA (ren dagslogg) =====
+  $('#eatBody').innerHTML=modeToggle+`
+    <div class="card"><div class="card-h"><span class="eyebrow">Dagens mål</span><span class="small" style="font-weight:700;color:${sum.k>t.kcal?'var(--amber)':'var(--gold)'}">${round(Math.max(0,t.kcal-sum.k))} kcal kvar</span></div>
+      ${macroLine('Protein',sum.p,t.protein,'#C9A24B')}${macroLine('Kolhydrater',sum.c,t.carbs,'#6FBF73')}${macroLine('Fett',sum.f,t.fat,'#D9943F')}${macroLine('Kalorier',round(sum.k),t.kcal,'#F2EDE3')}</div>
+    ${planCardHTML()}
     ${log.items.length?`<div class="card"><div class="card-h"><span class="eyebrow">Loggat idag</span><button class="link" onclick="clearDay()">Rensa</button></div>
       ${log.items.map((it,i)=>`<div class="logged-item"><div><div style="font-weight:600">${it.name}</div><div class="tiny muted">${it.p}p · ${it.c}c · ${it.f}f · ${it.kcal} kcal${it.mult&&it.mult!==1?` · ×${it.mult}`:''}</div></div><button class="link" onclick="removeFood(${i})">Ta bort</button></div>`).join('')}</div>`:''}
-    <div class="card"><div class="card-h"><span class="eyebrow">Recept</span><button class="link" onclick="openCreateRecipe()">+ Nytt recept</button></div>
-      <div class="rchips">${chip('auto','För idag')}${chip('high','Högkolhydrat')}${chip('low','Lågkolhydrat')}${chip('mine','Mina')}${chip('all','Alla')}</div>
-      ${list.length?list.map(r=>recipeCard(r)).join(''):'<div class="empty">Inga recept här än. Tryck “Nytt recept” för att skapa ett från dina råvaror.</div>'}
-    </div>
-    <div class="card"><div class="card-h"><span class="eyebrow">Snabbtillägg</span><span style="display:flex;gap:16px"><button class="link" onclick="openScan()">📷 Skanna</button><button class="link" onclick="manualFood()">+ Egen</button></span></div>
+    <div class="card"><div class="card-h"><span class="eyebrow">Lägg till utanför planen</span><span style="display:flex;gap:16px"><button class="link" onclick="openScan()">📷 Skanna</button><button class="link" onclick="manualFood()">+ Egen</button></span></div>
       <div style="max-height:230px;overflow-y:auto;margin:-4px -2px 0">
       ${FOODS.map((f,i)=>`<div class="food-row"><div><div style="font-size:14px;font-weight:600">${f.n}</div><div class="tiny muted">${f.p}p · ${f.c}c · ${f.f}f · ${f.k} kcal</div></div><button class="food-add" onclick="addFood(${i})">+</button></div>`).join('')}</div></div>
     <div style="height:6px"></div>`;
 }
+function dayTypeCard(train,t){return `<div class="card"><div class="card-h"><span class="eyebrow">Dagtyp — kolhydratcykling</span><span class="chip ${train?'':'blue'}">${t.phase.name}</span></div>
+    <div class="toggle2"><button class="${train?'on':''}" onclick="setDayType('train')">Träningsdag</button><button class="${!train?'on':''}" onclick="setDayType('rest')">Vilodag</button></div>
+    <p class="tiny muted" style="margin-top:10px">${train?'Högkolhydratdag — kolhydrater runt passet. Recepten är filtrerade för att matcha.':'Lågkolhydratdag — kolhydraterna dras ner, proteinet hålls.'}</p></div>`;}
+
 function recipeCard(r){const t=recipeTotals(r);const mp=macroPct(t.p,t.c,t.f);
   return `<div class="recipe-card" onclick="openRecipe('${r.id}')">
     <div style="flex:1"><div style="font-weight:700;font-size:15px">${r.name}</div>
@@ -1643,17 +1692,17 @@ function prepSummary(){
         <b style="color:var(--gold);min-width:14px;text-align:center">${prepMealCount(id)}</b>
         <button class="step-btn" style="width:26px;height:26px;font-size:16px" onclick="event.stopPropagation();setPrepMeals('${id}',1)">+</button>
       </div></div>
-      <button class="swap-btn" onclick="swapPrepMain(${i})">↻</button></div>`;};
+      <button class="swap-btn" onclick="openMealPicker('mains',${i})">↻</button></div>`;};
   const bfCard=(id,i)=>{const r=findRecipe(id);if(!r)return'';
     return `<div class="plan-meal"><div style="flex:1" onclick="openRecipe('${id}')">
       <div class="tiny" style="color:var(--muted);font-weight:700;letter-spacing:.06em">FRUKOST ${i+1}</div>
       <div style="font-weight:600;font-size:14px">${r.name}</div></div>
-      <button class="swap-btn" onclick="swapPrepBf(${i})">↻</button></div>`;};
+      <button class="swap-btn" onclick="openMealPicker('bfs',${i})">↻</button></div>`;};
   const snCard=(id,i)=>{const r=findRecipe(id);if(!r)return'';
     return `<div class="plan-meal"><div style="flex:1" onclick="openRecipe('${id}')">
       <div class="tiny" style="color:var(--muted);font-weight:700;letter-spacing:.06em">MELLANMÅL ${i+1}</div>
       <div style="font-weight:600;font-size:14px">${r.name}</div></div>
-      <button class="swap-btn" onclick="swapPrepSnack(${i})">↻</button></div>`;};
+      <button class="swap-btn" onclick="openMealPicker('snacks',${i})">↻</button></div>`;};
   const step=(kind,lbl,min,max)=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0">
     <span class="small">${lbl}</span>
     <span style="display:flex;align-items:center;gap:14px">
@@ -1683,6 +1732,39 @@ function prepSummary(){
   </div>`;
 }
 function nextInPool(pool,curId){if(!pool.length)return curId;const i=pool.findIndex(r=>r.id===curId);return pool[(i+1)%pool.length].id;}
+let mpCtx=null, mpSrc='all';
+function openMealPicker(kind,i){mpCtx={kind,i};mpSrc='all';renderMealPicker();}
+function setMpSrc(k){mpSrc=k;keepScroll(renderMealPicker);}
+function chooseMeal(id){if(!mpCtx)return;const {kind,i}=mpCtx;const p=normPrep(profile.prep);const arr=p[kind];
+  const existing=arr.indexOf(id);
+  if(existing>=0&&existing!==i){arr[existing]=arr[i];}  // om redan i planen: byt plats så inga dubbletter
+  arr[i]=id;
+  profile.prep=p;profile.prepVariant=-1;genPlan();closeOverlay();renderEat();}
+function renderMealPicker(){const {kind,i}=mpCtx;const p=normPrep(profile.prep);const curId=p[kind][i];
+  const slots=kind==='mains'?['lunch','middag']:kind==='bfs'?['frukost']:['mellanmal'];
+  const all=allRecipes().filter(r=>slots.includes(recipeSlot(r)));
+  const inUse=new Set(p[kind]);
+  const title=kind==='mains'?'BYT HUVUDRÄTT':kind==='bfs'?'BYT FRUKOST':'BYT MELLANMÅL';
+  let chips='';
+  if(kind==='mains'){const defs=[['all','Alla'],['felu','📖 Felu'],['jalal','📖 Jalal'],['zac','📖 Zac'],['original','✦ A·LIST'],['variant','✦ Mina']];
+    chips='<div class="rchips" style="margin-bottom:10px">'+defs.filter(([k])=>k==='all'||all.some(r=>srcKey(r)===k)).map(([k,lbl])=>{const n=k==='all'?all.length:all.filter(r=>srcKey(r)===k).length;return `<button class="rchip ${mpSrc===k?'on':''}" onclick="setMpSrc('${k}')">${lbl} <span class="tiny muted">${n}</span></button>`;}).join('')+'</div>';}
+  const list=(kind==='mains'&&mpSrc!=='all')?all.filter(r=>srcKey(r)===mpSrc):all;
+  const row=r=>{const t=recipeTotals(r);const cur=r.id===curId;const used=inUse.has(r.id)&&!cur;
+    return `<button class="pick-row ${cur?'on':''}" onclick="chooseMeal('${r.id}')">
+      <span class="pick-check">${cur?'✓':''}</span>
+      <span style="flex:1;text-align:left"><span style="font-weight:600;font-size:14px">${r.name}</span>
+      ${used?' <span class="tiny" style="color:var(--gold)">· redan i planen</span>':''}<br>
+      <span class="src-tag" style="margin:1px 0 0">${srcOf(r)}</span><br>
+      <span class="tiny muted">${t.p}p · ${t.c}g kolh · ${t.k} kcal</span></span></button>`;};
+  $('#overlay').style.display='block';
+  $('#overlay').innerHTML=`<div class="sheet"><div class="sheet-inner">
+    <div class="sheet-bar"><button class="link" onclick="closeOverlay()">Avbryt</button>
+      <span class="small muted">Tryck för att välja</span></div>
+    <h1 class="display" style="margin:4px 0 4px">${title}</h1>
+    <p class="muted small" style="margin-bottom:16px">Välj vilken rätt du vill byta till. Den ersätter den du tryckte ↻ på.</p>
+    ${chips}
+    ${list.map(row).join('')}
+    <div style="height:24px"></div></div></div>`;}
 function swapPrepMain(i){const pool=allRecipes().filter(r=>['lunch','middag'].includes(recipeSlot(r)));
   let id=profile.prep.mains[i];for(let k=0;k<pool.length;k++){id=nextInPool(pool,id);if(!profile.prep.mains.includes(id))break;}
   profile.prep.mains[i]=id;profile.prepVariant=-1;genPlan();renderEat();}
@@ -1694,11 +1776,11 @@ function setPlanMode(m){profile.planMode=m;if(m==='prep'&&(!profile.prep||!profi
 function applyAutoMatch(){profile.prepVariant=-1;profile.prep=autoMatchPrep();genPlan();renderEat();}
 let builderSel=null;
 let builderSrc='all';
-function setBuilderSrc(k){builderSrc=k;renderPrepBuilder();}
+function setBuilderSrc(k){builderSrc=k;keepScroll(renderPrepBuilder);}
 function openPrepBuilder(){const p=normPrep(profile.prep);builderSel={mains:p.mains.slice(),bfs:p.bfs.slice(),snacks:p.snacks.slice()};builderSrc='all';renderPrepBuilder();}
 function toggleBuilder(kind,id){const c=prepCounts();const arr=builderSel[kind],i=arr.indexOf(id),max=c[kind];
   if(i>=0)arr.splice(i,1);else if(arr.length<max)arr.push(id);
-  renderPrepBuilder();}
+  keepScroll(renderPrepBuilder);}
 function saveBuilder(){const c=prepCounts();if(builderSel.mains.length!==c.mains||builderSel.bfs.length!==c.bfs||builderSel.snacks.length!==c.snacks)return;
   profile.prepVariant=-1;profile.prep={mains:builderSel.mains.slice(),bfs:builderSel.bfs.slice(),snacks:builderSel.snacks.slice()};genPlan();closeOverlay();renderEat();}
 function renderPrepBuilder(){
@@ -1919,14 +2001,14 @@ function saveProduct(){const gv=id=>{const el=$('#'+id);return el?el.value:'';};
   if(_prodLinkCtx&&!_prodEditId){const ctx=_prodLinkCtx;_prodLinkCtx=null;
     profile.prodMap=profile.prodMap||{};profile.prodMap[ctx.base]=newId;saveAll();
     toast('"'+name+'" tillagd och kopplad till '+ctx.base);
-    if(ctx.global){eatTab='products';if(current!=='eat')go('eat');renderEat();}
-    else{closeOverlay();const rr=window._openR;if(rr)renderRecipeSheet(rr);}
+    if(ctx.global){eatMode='plan';eatTab='products';if(current!=='eat')go('eat');renderEat();}
+    else{closeOverlay();const rr=window._openR;if(rr)keepScroll(()=>renderRecipeSheet(rr));}
     return;}
   toast('"'+name+'" sparad i biblioteket');backToProducts();}
 function deleteProduct(id){const pr=products.find(x=>x.id===id);uiConfirm('Ta bort "'+((pr&&pr.name)||'varan')+'" ur biblioteket?',()=>{products=products.filter(x=>x.id!==id);saveProducts();if(current==='eat')renderEat();},'Ta bort');}
 
 /* ===== VARU-MATCHNING (steg 2): koppla receptingredienser till biblioteksvaror ===== */
-function ingBase(label){const m=(label||'').match(/^([^\d]*?)[\s,]*\d/);return (m?m[1]:(label||'')).replace(/[\s,]+$/,'').trim().toLowerCase();}
+function ingBase(label){var s=(label||'').replace(/\s*\d+(?:[.,]\d+)?\s*(?:g|ml|dl|kg|st)\b.*$/i,'');if(s===(label||''))s=(label||'').replace(/\s*\d.*$/,'');return s.replace(/[\s,(]+$/,'').trim().toLowerCase();}
 function autoMatchProduct(base){if(!base||!products.length)return null;
   const bw=base.split(/[\s,]+/).filter(x=>x.length>=3);if(!bw.length)return null;
   const hits=products.filter(pr=>{const pw=((pr.name||'')+' '+(pr.origName||'')).toLowerCase().split(/[\s,]+/).filter(x=>x.length>=3);
@@ -1975,7 +2057,7 @@ function openProductPicker(recipeId,base,globalMode){_pickCtx={recipeId,base,glo
     <div style="height:20px"></div></div></div>`;}
 function addProductFromPicker(){if(!_pickCtx)return;_prodLinkCtx={base:_pickCtx.base,global:!!_pickCtx.global,recipeId:_pickCtx.recipeId};
   const nm=_pickCtx.base?_pickCtx.base.charAt(0).toUpperCase()+_pickCtx.base.slice(1):'';renderProductForm({name:nm});}
-function closePicker(){const fromTab=_pickCtx&&_pickCtx.global;closeOverlay();if(fromTab){eatTab='products';if(current!=='eat')go('eat');renderEat();}else{const rr=window._openR;if(rr)renderRecipeSheet(rr);}}
+function closePicker(){const fromTab=_pickCtx&&_pickCtx.global;closeOverlay();if(fromTab){eatMode='plan';eatTab='products';if(current!=='eat')go('eat');renderEat();}else{const rr=window._openR;if(rr)keepScroll(()=>renderRecipeSheet(rr));}}
 function pickProduct(pid){if(!_pickCtx)return;const {recipeId,base,global}=_pickCtx;const recipeOnly=!global&&$('#pick-recipe-only')&&$('#pick-recipe-only').checked;
   profile.prodMap=profile.prodMap||{};profile.prodMapRecipe=profile.prodMapRecipe||{};const rk=recipeId+'::'+base;
   if(pid==='__auto__'){delete profile.prodMap[base];delete profile.prodMapRecipe[rk];}
@@ -1991,7 +2073,7 @@ function mainServings(id){ensurePlan();let n=0;mealPlan.forEach(day=>day.forEach
 function recipeServings(id){ensurePlan();let n=0;mealPlan.forEach(day=>day.forEach(mm=>{if(mm.id===id)n++;}));return n;}
 function recipeBatches(id){const b=(profile.prepBatches||{})[id];return b&&b>=1?b:1;}
 function recipeDefaultMult(id){const cnt=recipeServings(id);if(cnt<=0)return 1;const b=recipeBatches(id);return b>1?Math.max(1,Math.round(cnt/b)):cnt;}
-function setRecipeBatches(id,delta){profile.prepBatches=profile.prepBatches||{};const v=Math.max(1,Math.min(5,recipeBatches(id)+delta));profile.prepBatches[id]=v;saveAll();_recipeMult=Math.max(1,Math.round(recipeServings(id)/v));const r=findRecipe(id);if(r)renderRecipeSheet(r);}
+function setRecipeBatches(id,delta){profile.prepBatches=profile.prepBatches||{};const v=Math.max(1,Math.min(5,recipeBatches(id)+delta));profile.prepBatches[id]=v;saveAll();_recipeMult=Math.max(1,Math.round(recipeServings(id)/v));const r=findRecipe(id);if(r)keepScroll(()=>renderRecipeSheet(r));}
 function recipeCookMult(id){ensurePlan();let s=0;mealPlan.forEach((day,d)=>{const f=dayFactor(d);day.forEach(mm=>{if(mm.id===id)s+=f;});});return s>0?s:1;}
 function scaleLabel(label,m){if(m===1||!label)return label;
   return label.replace(/(\d+(?:[.,]\d+)?)(\s*%)?/g,(full,num,pct)=>{
@@ -2083,7 +2165,7 @@ function renderRecipeSheet(r){const R=recipeWith(r);const t=recipeTotals(r),m=_r
     ${r.prot?`<button class="btn btn-ghost" style="margin-top:10px" onclick="saveVariant('${r.id}')">💾 Spara som egen rätt (fryser in valt protein & sås)</button>`:''}
     <div style="height:20px"></div></div></div>`;
 }
-function setMult(m){_recipeMult=m;const r=window._openR;if(r)renderRecipeSheet(r);}
+function setMult(m){_recipeMult=m;const r=window._openR;if(r)keepScroll(()=>renderRecipeSheet(r));}
 function saveVariant(id){const r=findRecipe(id);if(!r||!r.prot)return;const eff=recipeWith(r);
   const key=protSub(r)||r.prot.base,sk=sauceSub(r);
   let name=(PROT_LBL[key]||'')+' · '+(r.dish||r.name);
@@ -2093,7 +2175,7 @@ function saveVariant(id){const r=findRecipe(id);if(!r||!r.prot)return;const eff=
   if(sk&&sk!=='none'&&SAUCES[sk]&&SAUCES[sk].how)method=method.concat(['Sås ('+SAUCES[sk].name+'): '+SAUCES[sk].how]);
   const nr={id:'u'+Date.now(),name,meal:r.meal,day:r.day,prep:r.prep,batch:r.batch,slot:recipeSlot(r),ing:eff.ing.map(x=>x.slice()),method};
   userRecipes.push(nr);saveAll();toast('"'+name+'" sparad — lägg till den i veckoschemat via Bibliotek → Mina');
-  if(current==='eat')renderEat();const rr=window._openR;if(rr)renderRecipeSheet(rr);}
+  if(current==='eat')renderEat();const rr=window._openR;if(rr)keepScroll(()=>renderRecipeSheet(rr));}
 function openRecipeStore(r){window._openR=r;}
 function closeOverlay(){$('#overlay').style.display='none';$('#overlay').innerHTML='';}
 let _confirmCb=null;
@@ -2154,7 +2236,7 @@ function renderProgress(){
         <button class="btn btn-gold btn-sm" style="width:auto;padding:0 20px;flex:0 0 auto" onclick="logWeightInline()">Logga</button></div>${weightLogHTML()}</div>
     ${rippedCard()}
     <div class="card"><div class="card-h"><span class="eyebrow">Baslyftens 1RM-utveckling</span></div>${render1RM()}</div>
-    <div class="card"><div class="card-h"><span class="eyebrow">Styrkerekord (loggade)</span></div>${renderPRs()}</div>
+    <div class="card"><div class="card-h"><span class="eyebrow">Styrkerekord · alla övningar</span></div>${renderPRs()}</div>
     <div class="card"><div class="card-h"><span class="eyebrow">Midja — måttet på att du blir smal</span></div>${renderMeasures()}
       <div style="display:flex;gap:8px;margin-top:12px">
         <input id="waistInput" type="number" inputmode="decimal" step="0.1" placeholder="Midja idag (cm)" style="${iS}">
@@ -2414,10 +2496,19 @@ function est1RM(w,r){return w*(1+r/30);}
 function renderPRs(){const prs={};
   Object.keys(workouts).forEach(d=>{if(!workouts[d].completed)return;
     workouts[d].exercises.forEach(e=>e.sets.forEach(s=>{if(s.done&&+s.w&&+s.r){const v=est1RM(+s.w,+s.r);if(!prs[e.n]||v>prs[e.n].v)prs[e.n]={v,w:+s.w,r:+s.r};}}));});
-  const list=Object.keys(prs).slice(0,8);
-  if(!list.length)return '<div class="empty">Avsluta pass med loggade vikter så dyker dina rekord upp här.</div>';
-  return list.map(k=>`<div class="pr-row"><div><div style="font-weight:600;font-size:14px">${k}</div><div class="tiny muted">est 1RM ${round(prs[k].v)} kg</div></div>
-    <div style="text-align:right"><span class="display" style="font-size:22px;color:var(--gold)">${prs[k].w}</span><span class="small muted"> kg × ${prs[k].r}</span></div></div>`).join('');}
+  // Alla övningar i ditt program (även ännu ej loggade) + ev. loggade extra
+  const prog=[];try{const days=(profile&&profile.days)||3;SPLITS(days,profile&&profile.spec).forEach(p=>{if(p.main)prog.push(LIFT_NAME[p.main]);(p.acc||[]).forEach(a=>{if(a)prog.push(a.n);});});}catch(e){}
+  const subs=(profile&&profile.exSubs)||{};
+  const progResolved=prog.map(n=>subs[n]?subs[n].n:n);
+  const all=[...new Set([...progResolved,...Object.keys(prs)])];
+  if(!all.length)return '<div class="empty">Avsluta pass med loggade vikter så dyker dina rekord upp här.</div>';
+  all.sort((a,b)=>{const pa=prs[a],pb=prs[b];if(pa&&pb)return pb.v-pa.v;if(pa)return -1;if(pb)return 1;return 0;});
+  const dn=n=>{try{return nameSv(n);}catch(e){return n;}};
+  return all.map(k=>{const p=prs[k];
+    if(p)return `<div class="pr-row"><div><div style="font-weight:600;font-size:14px">${dn(k)}</div><div class="tiny muted">est 1RM ${round(p.v)} kg</div></div>
+      <div style="text-align:right"><span class="display" style="font-size:22px;color:var(--gold)">${p.w}</span><span class="small muted"> kg × ${p.r}</span></div></div>`;
+    return `<div class="pr-row"><div><div style="font-weight:600;font-size:14px">${dn(k)}</div><div class="tiny muted">inget rekord än</div></div>
+      <span class="small muted" style="font-size:20px">—</span></div>`;}).join('');}
 const MPARTS=[['waist','Midja'],['chest','Bröst'],['arms','Armar'],['shoulders','Axlar']];
 function renderMeasures(){if(!measures.length)return '<div class="empty">Mät midjan varje vecka — den minskar när du blir smalare även om vågen står stilla.</div>';
   const last=measures[measures.length-1],first=measures[0];
@@ -2453,8 +2544,10 @@ function renderMe(){const wk=weekNumber();
     <div class="card"><div class="card-h"><span class="eyebrow">Lyft (uppskattat 1RM)</span><button class="link" onclick="edit1RM()">Ändra</button></div>
       ${Object.keys(LIFT_NAME).map(l=>`<div class="logged-item"><span class="muted">${nameSv(LIFT_NAME[l])}</span><span style="font-weight:600">${profile.oneRM[l]} kg <span class="tiny muted">→ nu ${eff1RM(l,wk)}</span></span></div>`).join('')}</div>
     <div class="card"><div class="card-h"><span class="eyebrow">Träning</span></div>
-      <div class="field"><label>Dagar / vecka</label><div class="seg" id="me-days">${[3,4,5].map(n=>`<button class="${profile.days==n?'on':''}" onclick="changeDays(${n})">${n}</button>`).join('')}</div>
-      <p class="tiny muted" style="margin-top:8px">Nyföddvecka? Gå ner till 3 — passen formas om till helkropp runt samma baslyft.</p></div>
+      <div class="field"><label>Träningsprogram</label><div class="seg" id="me-days">${[3,4,5].map(n=>`<button class="${profile.days==n?'on':''}" onclick="changeDays(${n})">${n} dagar</button>`).join('')}</div>
+      <div style="margin-top:10px;padding:12px 13px;background:rgba(201,162,75,.06);border:1px solid var(--border);border-radius:12px">
+        <div style="font-weight:700;color:var(--gold);font-size:13.5px">${(SCHEDULE_INFO[profile.days]||SCHEDULE_INFO[3])[0]}</div>
+        <p class="tiny muted" style="margin:5px 0 0;line-height:1.5">${(SCHEDULE_INFO[profile.days]||SCHEDULE_INFO[3])[1]}</p></div></div>
       <div class="field" style="margin:0"><label>Prioriterat område</label><select onchange="changeSpec(this.value)">
         ${['shoulders','arms','chest','back'].map(s=>`<option value="${s}" ${profile.spec===s?'selected':''}>${SPEC_SV[s]}</option>`).join('')}</select></div></div>
     <div class="card"><div class="card-h"><span class="eyebrow">Tidslinje</span></div>
