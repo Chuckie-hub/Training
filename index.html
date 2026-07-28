@@ -338,7 +338,7 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:16px 0}
 
 <script>
 const $=s=>document.querySelector(s);
-const APP_BUILD='b136 · 2026-07-26 · sök livsmedel i databas (utan streckkod)';
+const APP_BUILD='b140 · 2026-07-26 · nästa pass följer det du faktiskt gjorde (inte bara antal)';
 const todayStr=(d=new Date())=>{const z=new Date(d);z.setMinutes(z.getMinutes()-z.getTimezoneOffset());return z.toISOString().slice(0,10);};
 const round=(n,p=0)=>{const f=10**p;return Math.round(n*f)/f;};
 const clamp=(n,lo,hi)=>Math.max(lo,Math.min(hi,n));
@@ -467,13 +467,13 @@ function SPLITS(days,spec){
   const V4=[
     {name:'Överkropp A · press',focus:'Bröst · rygg · axlar',main:'bench',acc:[
       {n:'Barbell Row',s:4,r:'8–10',heavy:true},{n:'Incline DB Press',s:3,r:'8–10'},
-      {n:'DB Lateral Raise',s:4,r:'12–15'},{n:'Rope Pushdown',s:3,r:'10–12'},{n:'Hammer Curl',s:3,r:'10–12'},S]},
+      {n:'DB Lateral Raise',s:4,r:'12–15'},{n:'Rope Pushdown',s:3,r:'10–12'},{n:'Hammer Curl',s:3,r:'10–12'},{n:'Close-Grip Bench',s:3,r:'8–10'},S]},
     {name:'Underkropp',focus:'Ben · baksida · vad',main:'squat',acc:[
       {n:'Romanian Deadlift',s:3,r:'8–10',heavy:true},{n:'Leg Press',s:3,r:'12'},
       {n:'Leg Curl',s:3,r:'12'},{n:'Standing Calf Raise',s:4,r:'12–15'},{n:'Cable Crunch',s:3,r:'15'}]},
     {name:'Överkropp B · drag',focus:'Rygg · axlar · armar',main:'press',acc:[
       {n:'Lat Pulldown',s:4,r:'8–10'},{n:'Seated Cable Row',s:3,r:'10–12'},
-      {n:'DB Lateral Raise',s:4,r:'12–15'},{n:'Barbell Curl',s:3,r:'10–12'},{n:'Overhead Triceps Ext',s:3,r:'10–12'},S]},
+      {n:'DB Lateral Raise',s:4,r:'12–15'},{n:'Barbell Curl',s:3,r:'10–12'},{n:'Overhead Triceps Ext',s:3,r:'10–12'},{n:'Incline DB Curl',s:3,r:'10–12'},S]},
     {name:'Underkropp + bål',focus:'Baksida · rumpa · core',main:null,acc:[
       {n:'Romanian Deadlift',s:3,r:'8–10',heavy:true},{n:'Bulgarian Split Squat',s:3,r:'10/leg'},
       {n:'Seated Leg Curl',s:3,r:'12'},{n:'Hip Thrust',s:3,r:'10–12'},
@@ -494,8 +494,16 @@ const SCHEDULE_INFO={
 function sessionForToday(){
   if(!profile)return null;
   const prog=SPLITS(profile.days,profile.spec);
-  const done=Object.keys(workouts).filter(d=>workouts[d].completed).length;
-  return prog[done%prog.length];
+  // Föreslå passet EFTER det du senast faktiskt gjorde (respekterar om du bytt pass manuellt).
+  const doneDays=Object.keys(workouts).filter(d=>workouts[d]&&workouts[d].completed).sort();
+  if(doneDays.length){
+    const lastName=workouts[doneDays[doneDays.length-1]].name;
+    const idx=prog.findIndex(p=>p.name===lastName);
+    if(idx>=0)return prog[(idx+1)%prog.length];
+    // fallback om passets namn inte hittas (t.ex. bytt program): använd antal
+    return prog[doneDays.length%prog.length];
+  }
+  return prog[0];
 }
 
 /* ===== progressive overload (accessories) ===== */
@@ -1336,13 +1344,13 @@ function buildSession(t,wk){
     const st=dpState(dnm,range,dpSeedMain(t.main));const sets=3;
     ex.push({n:dnm,main:true,origN:s?nm:null,guide:!!s,dp:true,range,load:st.w||0,
       target:`${sets}×${st.r}${st.w?` @ ${st.w}kg`:''}`,
-      hint:`Sikta på ${st.r} reps på alla ${sets} set. Klarar du ${range[1]} på alla → +vikt nästa gång, börja om på ${range[0]}.`,
+      hint:`Mål idag: <b>${st.r} reps</b> på alla ${sets} set — stanna där, jaga inte fler. Nästa pass: +1 rep. När du klarar ${range[1]} på alla set höjs vikten och du börjar om på ${range[0]}.`,
       sets:Array.from({length:sets}).map(()=>({w:st.w||'',r:'',done:false}))});}
   t.acc.forEach(a=>{if(!a)return;const s=subs[a.n];const n=s?s.n:a.n,r=s?s.r:a.r;const ns=bulk?a.s+1:a.s;
     const range=dpRange(n,r);const st=dpState(n,range,null);
     ex.push({n,origN:s?a.n:null,dp:true,range,heavy:!!a.heavy,tempo:s?null:(a.tempo||null),
       target:`${ns}×${st.r}${st.w?` @ ${st.w}kg`:''}`,
-      hint:`Sikta på ${st.r} reps${st.w?` @ ${st.w}kg`:' (fyll i din vikt)'}. Klarar du ${range[1]} på alla set → +vikt, börja om på ${range[0]}.`,
+      hint:`Mål idag: <b>${st.r} reps</b>${st.w?` @ ${st.w}kg`:' (fyll i din vikt)'} — stanna där. Nästa pass: +1 rep. När du klarar ${range[1]} på alla set höjs vikten och du börjar om på ${range[0]}.`,
       sets:Array.from({length:ns}).map(()=>({w:st.w||'',r:'',done:false}))});});
   return {key:t.main||t.name,name:t.name,focus:t.focus,completed:false,exercises:ex};
 }
@@ -2305,6 +2313,28 @@ function saveRecipe(){const name=(window._nrName||'').trim();
   closeOverlay();toast('Recept sparat');renderEat();}
 
 /* ===== PROGRESS ===== */
+function foodHistoryHTML(){
+  const days=Object.keys(meals).filter(d=>meals[d]&&meals[d].items&&meals[d].items.length).sort().reverse();
+  if(!days.length)return '<div class="empty">Ingen matlogg än. Bocka i måltider eller logga mat under Mat → Logga, så byggs historiken upp här.</div>';
+  const sumOf=it=>it.reduce((a,i)=>({p:a.p+i.p,c:a.c+i.c,f:a.f+i.f,k:a.k+i.kcal}),{p:0,c:0,f:0,k:0});
+  const last7=days.slice(0,7).map(d=>sumOf(meals[d].items).k);
+  const avg=last7.length?Math.round(last7.reduce((a,b)=>a+b,0)/last7.length):0;
+  const rows=days.slice(0,30).map(d=>{const it=meals[d].items;const t=sumOf(it);
+    const dd=new Date(d+'T00:00').toLocaleDateString('sv-SE',{weekday:'short',day:'numeric',month:'short'});
+    const isToday=d===todayStr();
+    return `<div class="logged-item" style="cursor:pointer" onclick="showDayLog('${d}')"><div style="flex:1"><div style="font-weight:600;font-size:14px;text-transform:capitalize">${dd}${isToday?' <span class="tiny" style="color:var(--gold)">· idag</span>':''}</div><div class="tiny muted">${Math.round(t.p)}p · ${Math.round(t.c)}c · ${Math.round(t.f)}f · ${it.length} poster</div></div><span class="display" style="font-size:20px;color:var(--gold)">${Math.round(t.k)}</span><span class="small muted">&nbsp;kcal</span></div>`;}).join('');
+  return `<div class="trend-row" style="margin-bottom:10px"><span class="trend-big">${avg}</span><span class="small muted">kcal · snitt senaste ${last7.length} loggade ${last7.length===1?'dagen':'dagarna'}</span></div>${rows}`;}
+function showDayLog(d){const day=meals[d];if(!day||!day.items.length)return;const it=day.items;
+  const t=it.reduce((a,i)=>({p:a.p+i.p,c:a.c+i.c,f:a.f+i.f,k:a.k+i.kcal}),{p:0,c:0,f:0,k:0});
+  const dd=new Date(d+'T00:00').toLocaleDateString('sv-SE',{weekday:'long',day:'numeric',month:'long'});
+  $('#overlay').style.display='block';
+  $('#overlay').innerHTML=`<div class="sheet"><div class="sheet-inner">
+    <div class="sheet-bar"><button class="link" onclick="closeOverlay()">Stäng</button><span class="small muted">Matlogg</span></div>
+    <h1 class="display" style="margin:4px 0 4px;text-transform:capitalize">${dd}</h1>
+    <div class="trend-row" style="margin-bottom:4px"><span class="trend-big">${Math.round(t.k)}</span><span class="small muted">kcal</span></div>
+    <p class="muted small" style="margin-bottom:16px">${Math.round(t.p)}g protein · ${Math.round(t.c)}g kolhydrater · ${Math.round(t.f)}g fett · ${it.length} poster</p>
+    ${it.map(x=>`<div class="logged-item"><div><div style="font-weight:600">${esc(x.name)}</div><div class="tiny muted">${x.p}p · ${x.c}c · ${x.f}f · ${x.kcal} kcal</div></div></div>`).join('')}
+    <div style="height:20px"></div></div></div>`;}
 function renderProgress(){
   const body=$('#progressBody');
   const startW=profile.startWeight,curW=weights.length?weights[weights.length-1].kg:startW,diff=curW-startW;
@@ -2319,6 +2349,7 @@ function renderProgress(){
         <input id="wtInput" type="number" inputmode="decimal" step="0.1" placeholder="Vikt idag (kg)" style="${iS}">
         <button class="btn btn-gold btn-sm" style="width:auto;padding:0 20px;flex:0 0 auto" onclick="logWeightInline()">Logga</button></div>${weightLogHTML()}</div>
     ${rippedCard()}
+    <div class="card"><div class="card-h"><span class="eyebrow">Matlogg · kalorier & makros per dag</span></div>${foodHistoryHTML()}</div>
     <div class="card"><div class="card-h"><span class="eyebrow">Baslyftens 1RM-utveckling</span></div>${render1RM()}</div>
     <div class="card"><div class="card-h"><span class="eyebrow">Styrkerekord · alla övningar</span></div>${renderPRs()}</div>
     <div class="card"><div class="card-h"><span class="eyebrow">Midja — måttet på att du blir smal</span></div>${renderMeasures()}
