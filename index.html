@@ -338,7 +338,7 @@ hr.sep{border:none;border-top:1px solid var(--border);margin:16px 0}
 
 <script>
 const $=s=>document.querySelector(s);
-const APP_BUILD='b151 · 2026-07-29 · visar BMR, underhåll och ditt underskott i Jag';
+const APP_BUILD='b152 · 2026-07-30 · eget kaloriunderskott + egen makrofordelning';
 const todayStr=(d=new Date())=>{const z=new Date(d);z.setMinutes(z.getMinutes()-z.getTimezoneOffset());return z.toISOString().slice(0,10);};
 const round=(n,p=0)=>{const f=10**p;return Math.round(n*f)/f;};
 const clamp=(n,lo,hi)=>Math.max(lo,Math.min(hi,n));
@@ -540,13 +540,29 @@ function dayTargets(dayType,week){
   const src=bulk?BULK:MAP[ph.key];
   const td=Math.min(7,Math.max(0,(profile.trainingDays||[]).length));
   const mult=uni?((td*src.train+(7-td)*src.rest)/7):src[dayType];
-  let kcal=m*mult+(profile.kcalAdjust||0);
+  let kcal;
+  if(p.deficitMode==='custom'){
+    // Eget dagligt underskott/överskott (kcal). Positivt tal = underskott vid cut.
+    const D=Math.abs(+p.deficitKcal||0)*(bulk?-1:1);
+    if(uni||td<=0||td>=7)kcal=m-D;
+    else{const dTrain=D*0.7, dRest=(7*D-td*dTrain)/(7-td);
+      kcal=m-(dayType==='train'?dTrain:dRest);}
+    kcal+=(profile.kcalAdjust||0);
+  } else {
+    kcal=m*mult+(profile.kcalAdjust||0);
+  }
   // Säkerhetsspärr: aldrig under BMR och aldrig ett absurt lågt tal — men lägg dig INTE i det normala målet.
   const safety=Math.max(bmrV*0.95, p.sex==='male'?1300:1100);
   const hitFloor=kcal<safety; kcal=Math.max(kcal,safety);
-  let carbs=round(Math.max(30,(kcal-protein*4-fat*9)/4));
-  kcal=round(protein*4+fat*9+carbs*4);
-  return {kcal,protein,fat,carbs,maint:round(m),phase:ph,floor:round(safety),hitFloor,uniform:uni};
+  let prot=protein, ft=fat, carbs;
+  if(p.macroMode==='custom'&&p.macroPct){
+    const mp=p.macroPct, tot=(+mp.p||0)+(+mp.c||0)+(+mp.f||0);
+    if(tot>0){const sp=(+mp.p||0)/tot, sc=(+mp.c||0)/tot, sf=(+mp.f||0)/tot;
+      prot=round(kcal*sp/4); ft=round(kcal*sf/9); carbs=round(kcal*sc/4);}
+  }
+  if(carbs==null)carbs=round(Math.max(30,(kcal-prot*4-ft*9)/4));
+  kcal=round(prot*4+ft*9+carbs*4);
+  return {kcal,protein:prot,fat:ft,carbs,maint:round(m),phase:ph,floor:round(safety),hitFloor,uniform:uni};
 }
 function weeklyAvgKcal(){
   const wk=weekNumber(),d=profile.days;
@@ -2706,6 +2722,7 @@ function renderMe(){const wk=weekNumber();
       ${dayTargetBlock('Träningsdag','train',wk)}${dayTargetBlock('Vilodag','rest',wk)}
       ${energyBudgetHTML(wk)}
       <hr class="sep"><div class="small muted">Veckosnitt ≈ ${weeklyAvgKcal()} kcal/dag. Coachen justerar vilodagarnas kolhydrater när vikten svarar — protein och träningsdagarnas bränsle skyddas.</div></div>
+    ${targetSettingsHTML()}
     <div class="card"><div class="card-h"><span class="eyebrow">Lyft (uppskattat 1RM)</span><button class="link" onclick="edit1RM()">Ändra</button></div>
       ${Object.keys(LIFT_NAME).map(l=>`<div class="logged-item"><span class="muted">${nameSv(LIFT_NAME[l])}</span><span style="font-weight:600">${profile.oneRM[l]} kg <span class="tiny muted">· arbetsvikt ${(profile.dp&&profile.dp[LIFT_NAME[l]]&&profile.dp[LIFT_NAME[l]].w)||'—'} kg</span></span></div>`).join('')}</div>
     <div class="card"><div class="card-h"><span class="eyebrow">Träning</span></div>
@@ -2742,6 +2759,47 @@ function renderMe(){const wk=weekNumber();
     <p class="tiny muted" style="text-align:center;margin:16px 0 4px">A·LIST · bygge ${APP_BUILD}</p>
     <div class="empty tiny" style="padding:16px 0 4px">A·LIST — vågperiodiserad, kolhydratcyklad, deadline-styrd. Gör jobbet; kameran belönar det. 🎬</div><div style="height:6px"></div>`;
 }
+function targetSettingsHTML(){
+  const p=profile, custom=p.deficitMode==='custom', mcustom=p.macroMode==='custom';
+  const bulk=(p.goalMode||'cut')==='leanbulk';
+  const m=round(bmr(p)*activityFor(p));
+  const D=+p.deficitKcal||500;
+  const pct=m?Math.round(D/m*100):0;
+  const warn=pct>25;
+  const mp=p.macroPct||{p:35,c:40,f:25};
+  const iS="width:100%;background:var(--raised);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--bone);font-size:15px;font-family:var(--body)";
+  const t=dayTargets('rest',weekNumber());
+  return `<div class="card"><div class="card-h"><span class="eyebrow">Mina mål — kalorier &amp; makros</span></div>
+    <div class="field"><label>${bulk?'Kaloriöverskott':'Kaloriunderskott'}</label>
+      <div class="toggle2"><button class="${!custom?'on':''}" onclick="setDeficitMode('auto')">Automatiskt</button><button class="${custom?'on':''}" onclick="setDeficitMode('custom')">Eget</button></div>
+      ${custom?`<div style="display:flex;gap:8px;margin-top:10px">
+        <input id="defInput" type="number" inputmode="numeric" step="25" value="${D}" style="${iS};flex:1" placeholder="kcal/dag">
+        <button class="btn btn-gold btn-sm" style="width:auto;padding:0 18px;flex:0 0 auto" onclick="saveDeficit()">Spara</button></div>
+        <p class="tiny muted" style="margin:8px 0 0">${D} kcal/dag ≈ ${(D*7/7700).toFixed(2)} kg/vecka · ${pct}% av ditt underhåll (${m} kcal).</p>
+        ${warn?`<p class="tiny" style="color:var(--amber);margin:6px 0 0">⚠ Över 25% av underhållet är aggressivt — större risk att tappa muskel och prestation. 15–20% är oftast bättre.</p>`:''}
+        ${t.hitFloor?`<p class="tiny" style="color:var(--amber);margin:6px 0 0">⚠ Ditt mål begränsas av säkerhetsgolvet (${t.floor} kcal) — appen går inte lägre.</p>`:''}`
+      :`<p class="tiny muted" style="margin:8px 0 0">Appen räknar ut underskottet åt dig (~17% av underhållet) och skalar det med din kropp och dina träningsdagar.</p>`}</div>
+    <hr class="sep">
+    <div class="field" style="margin:0"><label>Makrofördelning</label>
+      <div class="toggle2"><button class="${!mcustom?'on':''}" onclick="setMacroMode('auto')">Automatiskt</button><button class="${mcustom?'on':''}" onclick="setMacroMode('custom')">Egen</button></div>
+      ${mcustom?`<div style="display:flex;gap:8px;margin-top:10px">
+        <div style="flex:1"><label class="tiny muted">Protein %</label><input id="mpP" type="number" inputmode="numeric" value="${mp.p}" style="${iS}"></div>
+        <div style="flex:1"><label class="tiny muted">Kolhydr. %</label><input id="mpC" type="number" inputmode="numeric" value="${mp.c}" style="${iS}"></div>
+        <div style="flex:1"><label class="tiny muted">Fett %</label><input id="mpF" type="number" inputmode="numeric" value="${mp.f}" style="${iS}"></div></div>
+      <button class="btn btn-gold btn-sm" style="width:100%;margin-top:10px" onclick="saveMacroPct()">Spara fördelning</button>
+      <p class="tiny muted" style="margin:8px 0 0">Nu: ${t.protein}g protein · ${t.carbs}g kolhydrater · ${t.fat}g fett. Summan måste bli 100%.</p>`
+      :`<p class="tiny muted" style="margin:8px 0 0">Protein ${round(targetWeight()*2.2)}g (2,2 g/kg) och fett ${round(targetWeight()*0.8)}g (0,8 g/kg) sätts efter din kroppsvikt — kolhydrater fyller upp resten.</p>`}</div></div>`;}
+function setDeficitMode(m){profile.deficitMode=m;if(m==='custom'&&!profile.deficitKcal)profile.deficitKcal=500;saveAll();renderMe();}
+function saveDeficit(){const el=$('#defInput');const v=parseInt(((el&&el.value)||'').replace(/\D/g,''));
+  if(!v||v<100||v>1200){toast('Ange mellan 100 och 1200 kcal');return;}
+  profile.deficitKcal=v;saveAll();renderMe();toast('Underskott satt till '+v+' kcal/dag ✓');}
+function setMacroMode(m){profile.macroMode=m;if(m==='custom'&&!profile.macroPct)profile.macroPct={p:35,c:40,f:25};saveAll();renderMe();}
+function saveMacroPct(){const g=id=>parseInt((($('#'+id)&&$('#'+id).value)||'').replace(/\D/g,''))||0;
+  const P=g('mpP'),C=g('mpC'),F=g('mpF'),tot=P+C+F;
+  if(tot!==100){toast('Summan måste bli 100% (nu '+tot+'%)');return;}
+  if(P<15){toast('Protein bör vara minst 15% för att skydda muskeln');return;}
+  if(F<15){toast('Fett bör vara minst 15% för hormoner och hälsa');return;}
+  profile.macroPct={p:P,c:C,f:F};saveAll();renderMe();toast('Makrofördelning sparad ✓');}
 function energyBudgetHTML(wk){
   const b=round(bmr(profile)), a=activityFor(profile), m=round(b*a);
   const avg=weeklyAvgKcal(), diff=avg-m, pct=m?Math.round(Math.abs(diff)/m*100):0;
